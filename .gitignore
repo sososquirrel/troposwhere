@@ -1,0 +1,26 @@
+# ── Data (never commit raw / processed data) ─────────────────
+data/
+
+# ── Generated figures (reproducible from notebooks) ──────────
+paper/figures/
+
+# ── Python bytecode ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Jupyter checkpoints ───────────────────────────────────────
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# ── OS / editor noise ─────────────────────────────────────────
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# ── Claude Code memory (local only) ──────────────────────────
+.claude/
+
+# ── Model registry (auto-generated, not source) ───────────────
+paper/model_comparison/models_registry.yaml
