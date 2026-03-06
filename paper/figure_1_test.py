@@ -3,9 +3,6 @@ figure_1_test.py — 3-D cloud + time-averaged isentropic mass-flux panel (Fig. 
 """
 
 import os
-import sys
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere')
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, LightSource

@@ -19,9 +19,10 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, Normalize
 
-# Make the VAE-HMM model importable
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere/latent-markov-convection')
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere/latent-markov-convection/models')
+# Make the VAE-HMM model importable (latent-markov-convection can't be a proper package due to dashes)
+_LMC = '/Users/sophieabramian/Documents/troposwhere/latent-markov-convection'
+sys.path.insert(0, _LMC)
+sys.path.insert(0, _LMC + '/models')
 
 from model import VAE_HMM
 

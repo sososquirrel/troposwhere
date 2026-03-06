@@ -1,10 +1,5 @@
 import os
-import sys
 import multiprocessing as mp
-
-# Use the local tropokit copy instead of the installed package
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere')
-
 import numpy as np
 from tqdm import tqdm
 

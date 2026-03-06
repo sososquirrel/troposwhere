@@ -1,10 +1,6 @@
 import os
-import sys
 import numpy as np
 from tqdm import tqdm
-
-# Use the local tropokit copy
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere')
 
 from tropokit.Simulation import Simulation
 from tropokit.utils import generate_simulation_paths

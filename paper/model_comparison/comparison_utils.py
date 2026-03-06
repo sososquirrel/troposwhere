@@ -10,12 +10,7 @@ import pickle
 import numpy as np
 import torch
 
-# Make project importable
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere/paper')
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere/latent-markov-convection')
-sys.path.insert(0, '/Users/sophieabramian/Documents/troposwhere/latent-markov-convection/models')
-
-import workflow_paper as wfp
+import workflow_paper as wfp  # wfp sets up the latent-markov-convection path on import
 from model import VAE_HMM
 
 RUNS_DIR = wfp._RUNS
