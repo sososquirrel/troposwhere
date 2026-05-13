@@ -1,0 +1,54 @@
+name: Build paper PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'paper/manuscript/**'
+      - '.github/workflows/build-paper.yml'
+  pull_request:
+    paths:
+      - 'paper/manuscript/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PAPER_DIR: paper/manuscript
+  MAIN_TEX: main.tex
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build LaTeX
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: ${{ env.PAPER_DIR }}
+          root_file: ${{ env.MAIN_TEX }}
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode -file-line-error
+
+      - name: Upload PDF as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-pdf
+          path: ${{ env.PAPER_DIR }}/*.pdf
+          if-no-files-found: error
+
+      - name: Update rolling release with latest PDF
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-pdf
+          name: Latest compiled PDF
+          body: |
+            Auto-built from commit ${{ github.sha }}.
+            Stable download URL: `https://github.com/${{ github.repository }}/releases/download/latest-pdf/<filename>.pdf`
+          files: ${{ env.PAPER_DIR }}/*.pdf
+          prerelease: false
+          make_latest: false
