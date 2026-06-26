@@ -49,9 +49,11 @@ PATHS = dict(
 # Specific trained model used in the paper
 MODEL_PATH = os.path.join(_RUNS, 'exp_20260220_1809_7a8b88_paper', 'best_model.pt')
 
-# Figure output directories
-FIGURES_DIR    = os.path.join(_ROOT, 'paper', 'figures')
-FIGURES_SI_DIR = os.path.join(_ROOT, 'paper', 'figures', 'si')
+# Figure output directories — notebooks write directly into the manuscript folder
+# (single source of truth). LaTeX's \graphicspath in main.tex / supplementary.tex
+# already lists figures/ relative to the manuscript root.
+FIGURES_DIR    = os.path.join(_ROOT, 'paper', 'manuscript', 'figures')
+FIGURES_SI_DIR = os.path.join(_ROOT, 'paper', 'manuscript', 'figures')
 
 
 # ============================================================
@@ -90,6 +92,19 @@ cluster_colors = {
 state_colors  = np.array([cluster_colors[s] for s in range(NUM_STATES)])
 cluster_cmap  = ListedColormap(state_colors)
 norm_state    = Normalize(vmin=0, vmax=NUM_STATES - 1)
+
+# Display offset: data is 0-indexed; figures/manuscript use 1-indexed labels.
+STATE_DISPLAY_OFFSET = 1
+
+def state_label(s):
+    """Display label for a state index. Data stays 0-indexed; figures show 1..NUM_STATES."""
+    return str(int(s) + STATE_DISPLAY_OFFSET)
+
+
+def panel_label(ax, label, x=0.02, y=0.97, fontsize=14):
+    """Add a bold panel label (a, b, c, ...) in the top-left of a subplot."""
+    ax.text(x, y, label, transform=ax.transAxes,
+            fontsize=fontsize, fontweight='bold', va='top', ha='left')
 
 
 # ============================================================
@@ -344,6 +359,10 @@ def stationary_distribution(Tmat: np.ndarray) -> np.ndarray:
     eigvals, eigvecs = np.linalg.eig(Tmat.T)
     idx = np.argmin(np.abs(eigvals - 1.0))
     pi = np.real(eigvecs[:, idx])
+    # The Perron eigenvector is sign-arbitrary; flip so it is mostly positive
+    # before clamping (otherwise an all-negative eigenvector is zeroed → NaN).
+    if pi.sum() < 0:
+        pi = -pi
     pi = np.maximum(pi, 0)
     return pi / pi.sum()
 
@@ -434,6 +453,442 @@ def indicator_autocorrelation_normalized(
     return C
 
 
+def eigendecomposition(Tmat: np.ndarray):
+    """Right eigendecomposition of a transition matrix, sorted by descending |λ|.
+
+    Returns:
+        eigvals: complex (K,)  — eigenvalues of Tmat.
+        eigvecs: complex (K, K) — right eigenvectors as columns, same ordering.
+    """
+    eigvals, eigvecs = np.linalg.eig(Tmat)
+    order = np.argsort(-np.abs(eigvals))
+    return eigvals[order], eigvecs[:, order]
+
+
+def relaxation_times(eigvals: np.ndarray, dt_minutes: float) -> np.ndarray:
+    """Exponential relaxation time τ_k = -dt / log(|λ_k|).
+
+    Stationary mode (|λ| = 1) returns inf. Use with eigvals from eigendecomposition().
+    """
+    with np.errstate(divide='ignore', invalid='ignore'):
+        tau = -dt_minutes / np.log(np.abs(eigvals))
+    return tau
+
+
+def survival_conditional_on_cp(
+    states: np.ndarray,
+    cp: np.ndarray,
+    target_state: int,
+    max_lag: int,
+    low_q: float = 0.25,
+    high_q: float = 0.75,
+) -> dict:
+    """Empirical survival probability inside `target_state`, conditioned on CP at start.
+
+    For each lag k = 0, 1, ..., max_lag, computes
+        S_bin(k) = P( s_{t+k} = target_state | s_t = target_state, CP_t in bin )
+    for two bins of CP at time t: 'low' (<= q-th quantile of CP at state-t timesteps)
+    and 'high' (>= q-th quantile). Also computes the unconditional curve.
+
+    The CP condition applies only at the starting time t, so no "chopping" of the
+    indicator series — the survival is well-defined throughout the lag window.
+
+    Returns dict with keys 'low', 'high', 'unc', each a tuple (S, n):
+        S: np.ndarray of length max_lag+1, with S[0] = 1
+        n: number of starting points used
+    """
+    states = np.asarray(states)
+    cp     = np.asarray(cp, dtype=float)
+    L      = min(len(states), len(cp))
+    states, cp = states[:L], cp[:L]
+
+    valid_starts = np.where(states == target_state)[0]
+    valid_starts = valid_starts[valid_starts + max_lag < L]
+
+    if len(valid_starts) == 0:
+        z = np.zeros(max_lag + 1)
+        return {'low': (z, 0), 'high': (z, 0), 'unc': (z, 0)}
+
+    cp_at_starts = cp[valid_starts]
+    low_thr      = np.quantile(cp_at_starts, low_q)
+    high_thr     = np.quantile(cp_at_starts, high_q)
+
+    starts_low  = valid_starts[cp_at_starts <= low_thr]
+    starts_high = valid_starts[cp_at_starts >= high_thr]
+
+    def _survival(idx):
+        n = len(idx)
+        if n == 0:
+            return np.zeros(max_lag + 1), 0
+        S = np.empty(max_lag + 1)
+        for k in range(max_lag + 1):
+            S[k] = np.mean(states[idx + k] == target_state)
+        return S, n
+
+    return {
+        'low':  _survival(starts_low),
+        'high': _survival(starts_high),
+        'unc':  _survival(valid_starts),
+    }
+
+
+def markov_survival(Tmat: np.ndarray, target_state: int, max_lag: int) -> np.ndarray:
+    """Markov-predicted survival probability P(s_{t+k}=i | s_t=i) = [T^k]_{ii}.
+
+    Note: this includes trajectories that left state i and came back, which is
+    fine for comparing with the empirical estimator above (which does the same).
+    """
+    T = np.asarray(Tmat)
+    n_states = T.shape[0]
+    S = np.empty(max_lag + 1)
+    Tk = np.eye(n_states)
+    for k in range(max_lag + 1):
+        S[k] = Tk[target_state, target_state]
+        Tk = Tk @ T
+    return S
+
+
+def load_cp_lifecycle_indices(
+    timeseries_csv: str,
+    summary_csv: str,
+    young_age_threshold: int = 5,
+    n_timesteps: int = None,
+) -> dict:
+    """Build age-stratified cold-pool indices from the per-CP lifecycle CSVs.
+
+    `timeseries_csv` provides one row per (CP, timestep) with persistent label_id.
+    `summary_csv` provides one row per CP with start_time, duration, etc.
+    We join the two and compute age = current_time - start_time for each entry.
+
+    Returns dict of numpy arrays, all of length `n_timesteps` (or max global_time+1):
+        'area'            : total cold-pool area  (matches the original CPI definition)
+        'intensity'       : sum of |Δqv| across CPs
+        'area_x_int'      : sum of area * |Δqv| across CPs (intensity-weighted area)
+        'young'           : sum of area * |Δqv| only for CPs with age < young_age_threshold
+                            -- proxy for "active / fresh" cold pools (still building up)
+        'old'             : sum of area * |Δqv| for CPs with age >= young_age_threshold
+                            -- proxy for "decaying / mature" cold pools
+        'specific_intensity': sum of |Δqv| / sqrt(area)
+                            -- proxy for "small AND intense": high if CPs are physically
+                            compact but strongly desiccated; low if they're spread out
+                            and weak
+        'mean_age'        : intensity-weighted mean age of CPs alive at each timestep
+                            -- low when convection is bursting new CPs, high when CPs
+                            are old and spreading
+    """
+    import pandas as pd
+    ts = pd.read_csv(timeseries_csv)
+    sm = pd.read_csv(summary_csv)
+    ts = ts.merge(sm[['simulation', 'label_id', 'start_time']],
+                  on=['simulation', 'label_id'])
+    ts['age'] = ts['time'] - ts['start_time']
+
+    # Always allocate enough room to hold the maximum global_time index.
+    needed = int(ts['global_time'].max()) + 1
+    if n_timesteps is None or n_timesteps < needed:
+        n_timesteps = needed
+
+    gt    = ts['global_time'].values.astype(int)
+    sz    = ts['size'].values.astype(float)
+    aqv   = ts['anomaly_qv'].abs().values.astype(float)
+    age_a = ts['age'].values.astype(float)
+    out = {}
+
+    def _sum_by_time(values, mask=None):
+        a = np.zeros(n_timesteps, dtype=float)
+        if mask is None:
+            np.add.at(a, gt, values)
+        else:
+            np.add.at(a, gt[mask], values[mask])
+        return a
+
+    out['area']       = _sum_by_time(sz)
+    out['intensity']  = _sum_by_time(aqv)
+    out['area_x_int'] = _sum_by_time(sz * aqv)
+    mask_young = age_a < young_age_threshold
+    mask_old   = age_a >= young_age_threshold
+    out['young']      = _sum_by_time(sz * aqv, mask=mask_young)
+    out['old']        = _sum_by_time(sz * aqv, mask=mask_old)
+    out['specific_intensity'] = _sum_by_time(aqv / np.sqrt(sz + 1e-9))
+
+    # Population-level indices (probe cold-pool collisions / count, not aggregate intensity)
+    ones = np.ones_like(sz)
+    out['count']        = _sum_by_time(ones)                    # # of CPs alive at t
+    out['count_mature'] = _sum_by_time(ones, mask=mask_old)     # only mature (collision-ready)
+    out['count_births'] = _sum_by_time(ones, mask=(age_a == 0)) # # CPs born at t (fresh activity)
+    # mean size = total area / count, zero if no CPs
+    out['mean_size']    = np.divide(out['area'], out['count'],
+                                     out=np.zeros_like(out['area']),
+                                     where=out['count'] > 0)
+
+    # Dominant-CP indices: probes "is the leading CP still strong?"
+    # max_intensity:        across all CPs alive at t, the largest |Δq_v|
+    # intensity_of_largest: |Δq_v| of the largest-area CP at t
+    # area_of_largest:      area of the largest-area CP at t
+    out['max_intensity']        = np.zeros(n_timesteps, dtype=float)
+    out['intensity_of_largest'] = np.zeros(n_timesteps, dtype=float)
+    out['area_of_largest']      = np.zeros(n_timesteps, dtype=float)
+    out['age_of_largest']       = np.zeros(n_timesteps, dtype=float)
+    # Group by global_time using sorted approach (faster than pandas groupby)
+    order = np.argsort(gt)
+    gt_s, sz_s, aqv_s, age_s = gt[order], sz[order], aqv[order], age_a[order]
+    starts = np.searchsorted(gt_s, np.arange(n_timesteps), side="left")
+    ends   = np.searchsorted(gt_s, np.arange(n_timesteps), side="right")
+    for t in range(n_timesteps):
+        i0, i1 = starts[t], ends[t]
+        if i1 > i0:
+            sz_t  = sz_s[i0:i1]
+            aqv_t = aqv_s[i0:i1]
+            age_t = age_s[i0:i1]
+            out['max_intensity'][t]        = aqv_t.max()
+            j_max = int(np.argmax(sz_t))
+            out['intensity_of_largest'][t] = aqv_t[j_max]
+            out['area_of_largest'][t]      = sz_t[j_max]
+            out['age_of_largest'][t]       = age_t[j_max]
+
+    # Intensity-weighted mean age per timestep
+    weight = sz * aqv
+    age_weighted_sum = _sum_by_time(weight * age_a)
+    total_weight = _sum_by_time(weight)
+    out['mean_age'] = np.divide(age_weighted_sum, total_weight,
+                                 out=np.zeros_like(age_weighted_sum),
+                                 where=total_weight > 0)
+    return out
+
+
+def load_cp_index_variants(pickle_path: str) -> dict:
+    """Build alternative cold-pool index variants from the per-CP pickle.
+
+    The pickle is a list of dicts, each describing one cold pool at one time
+    step, with keys: 'ts', 'sim', 'area', 'anomaly_qv', 'max_anomaly_qv'.
+
+    Returns a dict of numpy arrays, all of length max_ts + 1:
+        'area'         — sum of cold-pool areas at each ts (= current CPI definition)
+        'intensity'    — sum of |anomaly_qv| at each ts (intensity-only, area-agnostic)
+        'area_x_int'   — sum of area * |anomaly_qv| (intensity-weighted area)
+        'max_int'      — sum of max_anomaly_qv (peak-intensity proxy)
+        'count'        — number of cold pools alive at each ts
+        'mean_int'     — mean |anomaly_qv| across cold pools at each ts (0 if none)
+    """
+    import pickle as _pickle
+    with open(pickle_path, 'rb') as f:
+        data = _pickle.load(f)
+    if not data:
+        return {}
+    max_ts = max(cp['ts'] for cp in data)
+    n = max_ts + 1
+    out = {k: np.zeros(n, dtype=float) for k in
+           ['area', 'intensity', 'area_x_int', 'max_int', 'count']}
+    for cp in data:
+        t = cp['ts']
+        a = float(cp['area'])
+        i = abs(float(cp['anomaly_qv']))
+        m = abs(float(cp['max_anomaly_qv']))
+        out['area'][t]       += a
+        out['intensity'][t]  += i
+        out['area_x_int'][t] += a * i
+        out['max_int'][t]    += m
+        out['count'][t]      += 1
+    out['mean_int'] = np.divide(out['intensity'], out['count'],
+                                 out=np.zeros_like(out['intensity']),
+                                 where=out['count'] > 0)
+    return out
+
+
+def composite_around_events(
+    event_times: np.ndarray,
+    signal: np.ndarray,
+    window: int,
+) -> tuple:
+    """Lagged composite of `signal` aligned on arbitrary event times.
+
+    Same logic as composite_around_entries but for a generic event-time array.
+    Returns (lags, mean, sem, n).
+    """
+    signal = np.asarray(signal, dtype=float)
+    event_times = np.asarray(event_times, dtype=int)
+    valid = (event_times >= window) & (event_times + window + 1 <= len(signal))
+    event_times = event_times[valid]
+    n = len(event_times)
+    lags = np.arange(-window, window + 1)
+    if n == 0:
+        return lags, np.zeros_like(lags, dtype=float), np.zeros_like(lags, dtype=float), 0
+    comps = np.stack([signal[t - window : t + window + 1] for t in event_times])
+    mean = comps.mean(axis=0)
+    sem  = comps.std(axis=0, ddof=1) / np.sqrt(n) if n > 1 else np.zeros_like(mean)
+    return lags, mean, sem, n
+
+
+def state_entry_times(state_series: np.ndarray, target_state: int) -> np.ndarray:
+    """Time indices t where state_series[t] == target_state and state_series[t-1] != target_state."""
+    s = np.asarray(state_series)
+    return np.where((s[1:] == target_state) & (s[:-1] != target_state))[0] + 1
+
+
+def state_exit_times(state_series: np.ndarray, target_state: int) -> np.ndarray:
+    """Time indices t where state_series[t] != target_state and state_series[t-1] == target_state."""
+    s = np.asarray(state_series)
+    return np.where((s[1:] != target_state) & (s[:-1] == target_state))[0] + 1
+
+
+def state_presence_times(state_series: np.ndarray, target_state: int) -> np.ndarray:
+    """All time indices t where state_series[t] == target_state."""
+    return np.where(np.asarray(state_series) == target_state)[0]
+
+
+def composite_around_entries(
+    state_series: np.ndarray,
+    signal: np.ndarray,
+    target_state: int,
+    window: int,
+) -> tuple:
+    """Lagged composite of `signal` aligned on entries into `target_state`.
+
+    An "entry" is a time step t with state_series[t]=target_state and
+    state_series[t-1]!=target_state. For each entry with a full window
+    available, we extract signal[t-window : t+window+1] and average.
+
+    Returns:
+        lags:     np.arange(-window, window+1)
+        mean:     mean composite (length 2*window+1)
+        sem:      standard error of the mean per lag (length 2*window+1)
+        n:        number of entry events used
+    """
+    state_series = np.asarray(state_series)
+    signal       = np.asarray(signal, dtype=float)
+    # Entry times: first index of each run of target_state
+    entries = np.where(
+        (state_series[1:] == target_state) & (state_series[:-1] != target_state)
+    )[0] + 1
+    valid   = (entries >= window) & (entries + window + 1 <= len(signal))
+    entries = entries[valid]
+    n       = len(entries)
+    lags    = np.arange(-window, window + 1)
+
+    if n == 0:
+        return lags, np.zeros_like(lags, dtype=float), np.zeros_like(lags, dtype=float), 0
+
+    comps = np.stack([signal[t - window : t + window + 1] for t in entries])
+    mean  = comps.mean(axis=0)
+    sem   = comps.std(axis=0, ddof=1) / np.sqrt(n) if n > 1 else np.zeros_like(mean)
+    return lags, mean, sem, n
+
+
+def autocorrelation_continuous(x: np.ndarray, max_lag: int) -> np.ndarray:
+    """Normalised autocorrelation of a (zero-mean-centred) 1-D time series.
+    Returns C with C[0]=1, length max_lag+1.
+    """
+    x = np.asarray(x, dtype=float)
+    x = x - x.mean()
+    var = x.var()
+    if var == 0:
+        return np.zeros(max_lag + 1)
+    C = np.empty(max_lag + 1)
+    for k in range(max_lag + 1):
+        C[k] = np.mean(x[:-k or None] * x[k:]) / var
+    return C
+
+
+def cross_correlation(x: np.ndarray, y: np.ndarray, max_lag: int) -> tuple:
+    """Symmetric cross-correlation of two 1-D time series.
+
+    Computes Pearson correlation of (x_t, y_{t+tau}) for tau in [-max_lag, +max_lag].
+    Positive tau means y leads x (i.e., y at time t+tau correlates with x at time t).
+
+    Returns:
+        lags: np.ndarray of length 2*max_lag+1
+        C:    np.ndarray of cross-correlation values
+    """
+    x = np.asarray(x, dtype=float); x = x - x.mean()
+    y = np.asarray(y, dtype=float); y = y - y.mean()
+    sx, sy = x.std(), y.std()
+    if sx == 0 or sy == 0:
+        return np.arange(-max_lag, max_lag + 1), np.zeros(2 * max_lag + 1)
+    lags = np.arange(-max_lag, max_lag + 1)
+    C = np.empty(lags.size)
+    for i, tau in enumerate(lags):
+        if tau >= 0:
+            C[i] = np.mean(x[:len(x) - tau] * y[tau:]) / (sx * sy)
+        else:
+            C[i] = np.mean(x[-tau:] * y[:len(y) + tau]) / (sx * sy)
+    return lags, C
+
+
+def markov_autocorrelation_indicator(
+    Tmat: np.ndarray,
+    pi: np.ndarray,
+    state_idx: int,
+    max_lag: int,
+) -> np.ndarray:
+    """Theoretical autocorrelation of the indicator I_i(t) = 1[X_t = i]
+    under a stationary Markov chain with transition T and stationary distribution pi.
+
+    C_i(τ) = (T^τ[i,i] - π_i) / (1 - π_i)
+    """
+    pi_i = pi[state_idx]
+    if pi_i >= 1.0 - 1e-12:
+        return np.ones(max_lag + 1)
+    C = np.zeros(max_lag + 1)
+    Tk = np.eye(Tmat.shape[0])           # T^0
+    for k in range(max_lag + 1):
+        C[k] = (Tk[state_idx, state_idx] - pi_i) / (1.0 - pi_i)
+        Tk = Tk @ Tmat                    # now T^(k+1) for next iter
+    return C
+
+
+def compute_conditional_transition_matrix(
+    states: np.ndarray,
+    cp: np.ndarray,
+    cp_bins: np.ndarray,
+    num_states: int,
+    future: int = 1,
+    min_window_len: int = 20,
+) -> tuple:
+    """Per-bin transition matrix built only from in-window transitions.
+
+    For each CP bin, find contiguous time spans where cp[t] stays in the bin
+    for at least `min_window_len` consecutive steps, collect (s_t, s_{t+future})
+    pairs *inside* those spans, and build a row-stochastic transition matrix.
+
+    Returns:
+        T_list:        list of (num_states, num_states) row-stochastic matrices,
+                       one per CP bin.
+        pi_list:       list of (num_states,) stationary distributions of those T's.
+        n_pairs_list:  list of ints, number of transition pairs used per bin.
+    """
+    n_bins        = len(cp_bins) - 1
+    T_list        = []
+    pi_list       = []
+    n_pairs_list  = []
+
+    for b in range(n_bins):
+        in_bin = (cp >= cp_bins[b]) & (cp < cp_bins[b + 1])
+        runs   = [(s, e) for (s, e) in _contiguous_runs(in_bin) if e - s >= min_window_len]
+
+        T = np.zeros((num_states, num_states))
+        n_pairs = 0
+        for s, e in runs:
+            for t in range(s, e - future):
+                T[states[t], states[t + future]] += 1
+                n_pairs += 1
+
+        row_sums = T.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        T_norm = T / row_sums
+
+        try:
+            pi_cp = stationary_distribution(T_norm)
+        except Exception:
+            counts = T.sum(axis=0)
+            pi_cp = counts / counts.sum() if counts.sum() > 0 else np.ones(num_states) / num_states
+
+        T_list.append(T_norm)
+        pi_list.append(pi_cp)
+        n_pairs_list.append(n_pairs)
+
+    return T_list, pi_list, n_pairs_list
+
+
 def markov_autocorrelation(
     Tmat: np.ndarray,
     pi: np.ndarray,
@@ -454,13 +909,156 @@ def markov_autocorrelation(
     return C
 
 
+# ============================================================
+# State-7 split by cold-pool area tendency
+# (test: is cold-pool maturity the slow variable the 7-state
+#  partition is missing? Split State 7 into growing/decaying
+#  cold-pool sub-states, recompute T, recompute autocorrelation.)
+# ============================================================
+
+def cold_pool_area_tendency(
+    area: np.ndarray,
+    smooth_sigma: float = 0.0,
+) -> np.ndarray:
+    """Per-timestep cold-pool area tendency dA/dt (same length as `area`).
+
+    `area` is a per-timestep cold-pool area series (e.g.
+    ``cp_lifecycle['area']`` for total area, or ``'area_of_largest'`` for the
+    dominant cold pool). Optionally Gaussian-smoothed before differencing to
+    suppress single-step tracking noise. Sign convention:
+        > 0  cold pool(s) growing  -> "young / aims to last"
+        < 0  cold pool(s) decaying -> "old / about to exit"
+    """
+    a = np.asarray(area, dtype=float)
+    if smooth_sigma and smooth_sigma > 0:
+        from scipy.ndimage import gaussian_filter1d
+        a = gaussian_filter1d(a, sigma=smooth_sigma, mode="nearest")
+    return np.gradient(a)
+
+
+def split_state_by_area_tendency(
+    states: np.ndarray,
+    area_tendency: np.ndarray,
+    target_state: int = 6,
+    new_label: int = 7,
+) -> np.ndarray:
+    """Split `target_state` into two sub-states by cold-pool area-tendency sign.
+
+    Growing/flat (tendency >= 0) keeps `target_state` ("young, aims to last");
+    decaying (tendency < 0) is relabelled `new_label` ("old, about to exit").
+    All other states are untouched. `states` and `area_tendency` are aligned to
+    a common length (the shorter of the two) before splitting.
+    """
+    n = min(len(states), len(area_tendency))
+    s8 = np.asarray(states[:n]).copy()
+    tend = np.asarray(area_tendency[:n])
+    decaying = (s8 == target_state) & (tend < 0)
+    s8[decaying] = new_label
+    return s8
+
+
+def markov_autocorrelation_group_indicator(
+    Tmat: np.ndarray,
+    pi: np.ndarray,
+    group,
+    max_lag: int,
+) -> np.ndarray:
+    """Theoretical autocorrelation of the *grouped* indicator Y(t)=1[X_t in G].
+
+    For a stationary Markov chain (T, pi) and group G:
+        C_G(tau) = ( sum_{i in G} pi_i sum_{j in G} (T^tau)_{ij} - P_G^2 )
+                   / ( P_G - P_G^2 ),     P_G = sum_{i in G} pi_i.
+
+    With G a single state this reduces to markov_autocorrelation_indicator.
+    Used to compare the 8-state (split) chain's prediction for the *physical*
+    State 7 (= union of the two sub-states) against the empirical curve.
+    """
+    g = np.asarray(list(group), dtype=int)
+    P = float(pi[g].sum())
+    if P <= 1e-12 or P >= 1.0 - 1e-12:
+        return np.ones(max_lag + 1)
+    C = np.zeros(max_lag + 1)
+    Tk = np.eye(Tmat.shape[0])              # T^0
+    for k in range(max_lag + 1):
+        joint = float(pi[g] @ Tk[np.ix_(g, g)].sum(axis=1))
+        C[k] = (joint - P * P) / (P - P * P)
+        Tk = Tk @ Tmat                      # T^(k+1) for next iter
+    return C
+
+
+def state7_split_markovianity(
+    states: np.ndarray,
+    area: np.ndarray,
+    target_state: int = 6,
+    new_label: int = 7,
+    future: int = 5,
+    subsample: int = 5,
+    max_lag: int = 50,
+    smooth_sigma: float = 0.0,
+) -> dict:
+    """Test whether splitting State 7 by cold-pool area tendency restores Markovianity.
+
+    Builds the 7-state and 8-state chains the same way the main analysis does
+    (full-resolution `states`, lag `future`; autocorrelation on the
+    `subsample`-decimated series). Returns the empirical State-7 autocorrelation
+    (unchanged by the split), the 7-state Markov prediction (which undershoots —
+    the Fig.~9 gap), and the 8-state grouped prediction, plus how much of the
+    gap the split closes.
+
+    Returns dict with keys:
+        lags, emp, pred7, pred8,
+        states8, T7, pi7, T8, pi8,
+        frac_young, rmse7, rmse8, gap_closed_frac
+    """
+    states = np.asarray(states)
+    tend = cold_pool_area_tendency(area, smooth_sigma=smooth_sigma)
+    states8 = split_state_by_area_tendency(states, tend, target_state, new_label)
+    n = len(states8)
+    states_al = states[:n]
+
+    K7 = int(states_al.max()) + 1
+    T7 = compute_transition_matrix(states_al, K7, future=future)
+    pi7 = stationary_distribution(T7)
+    T8 = compute_transition_matrix(states8, new_label + 1, future=future)
+    pi8 = stationary_distribution(T8)
+
+    emp = indicator_autocorrelation_normalized(
+        states_al[::subsample], max_lag=max_lag,
+    )[target_state]
+    pred7 = markov_autocorrelation_indicator(T7, pi7, target_state, max_lag)
+    pred8 = markov_autocorrelation_group_indicator(
+        T8, pi8, (target_state, new_label), max_lag,
+    )
+
+    s7_mask = states8 == target_state
+    n_phys7 = int((states_al == target_state).sum())
+    frac_young = float(s7_mask.sum()) / n_phys7 if n_phys7 else float("nan")
+
+    rmse7 = float(np.sqrt(np.mean((emp - pred7) ** 2)))
+    rmse8 = float(np.sqrt(np.mean((emp - pred8) ** 2)))
+    gap_closed = (rmse7 - rmse8) / rmse7 if rmse7 > 0 else float("nan")
+
+    return dict(
+        lags=np.arange(max_lag + 1), emp=emp, pred7=pred7, pred8=pred8,
+        states8=states8, T7=T7, pi7=pi7, T8=T8, pi8=pi8,
+        frac_young=frac_young, rmse7=rmse7, rmse8=rmse8,
+        gap_closed_frac=gap_closed,
+    )
+
+
 def indicator_autocorrelation_state6_cp(
     states: np.ndarray,
     cp: np.ndarray,
     cp_bins: np.ndarray,
     max_lag: int,
 ) -> np.ndarray:
-    """CP-conditioned autocorrelation for state 6. Returns (n_bins, max_lag+1)."""
+    """CP-conditioned autocorrelation for state 6 (original chopped-series version).
+
+    Builds the indicator (state==6 AND cp in bin) over the full series and computes
+    its autocorrelation. Note: drops to zero whenever cp leaves the bin, which
+    artificially shortens persistence. See indicator_autocorrelation_state6_cp_windowed
+    for the reviewer-suggested alternative.
+    """
     C = np.zeros((len(cp_bins) - 1, max_lag + 1))
     for b in range(len(cp_bins) - 1):
         I = ((states == 6) & (cp >= cp_bins[b]) & (cp < cp_bins[b + 1])).astype(float)
@@ -471,6 +1069,99 @@ def indicator_autocorrelation_state6_cp(
         for k in range(max_lag + 1):
             C[b, k] = np.mean(I[:-k or None] * I[k:]) / var
     return C
+
+
+def _contiguous_runs(mask: np.ndarray):
+    """List of (start, end_exclusive) tuples of True runs in a 1D boolean array."""
+    runs, in_run, start = [], False, 0
+    for i, v in enumerate(mask):
+        if v and not in_run:
+            start, in_run = i, True
+        elif not v and in_run:
+            runs.append((start, i))
+            in_run = False
+    if in_run:
+        runs.append((start, len(mask)))
+    return runs
+
+
+def indicator_autocorrelation_state6_cp_windowed(
+    states: np.ndarray,
+    cp: np.ndarray,
+    cp_bins: np.ndarray,
+    max_lag: int,
+    min_window_len: int = 20,
+) -> tuple:
+    """Cold-pool conditioned state-6 autocorrelation, computed inside contiguous CP windows.
+
+    For each CP bin, find contiguous time windows where cp[t] stays in the bin for at
+    least `min_window_len` consecutive steps. Compute the state-6 indicator autocorrelation
+    *within each window*, then average across windows weighted by the number of valid
+    lag-k pairs (window_len - k). This addresses the reviewer's concern that the original
+    chopped-series version artificially reduces autocorrelation when cp leaves the bin.
+
+    Returns:
+        C:        (n_bins, max_lag+1) — weighted-average autocorrelation per bin.
+        n_windows: (n_bins,) — number of qualifying windows per bin.
+    """
+    n_bins = len(cp_bins) - 1
+    C = np.zeros((n_bins, max_lag + 1))
+    n_windows = np.zeros(n_bins, dtype=int)
+
+    for b in range(n_bins):
+        in_bin = (cp >= cp_bins[b]) & (cp < cp_bins[b + 1])
+        runs   = [(s, e) for (s, e) in _contiguous_runs(in_bin) if e - s >= min_window_len]
+        n_windows[b] = len(runs)
+        if not runs:
+            continue
+
+        # Pre-center each window's state-6 indicator
+        windows = []
+        for s, e in runs:
+            I   = (states[s:e] == 6).astype(float)
+            I  -= I.mean()
+            var = I.var()
+            if var > 0:
+                windows.append((e - s, I, var))
+
+        for k in range(max_lag + 1):
+            num, denom = 0.0, 0.0
+            for window_len, I, var in windows:
+                if window_len <= k:
+                    continue
+                ac_k = np.mean(I[:-k or None] * I[k:]) / var
+                w    = window_len - k
+                num   += w * ac_k
+                denom += w
+            if denom > 0:
+                C[b, k] = num / denom
+
+    return C, n_windows
+
+
+def bootstrap_profile_band(
+    samples: np.ndarray,
+    n_boot: int = 500,
+    ci: float = 0.90,
+    seed: int = 0,
+) -> tuple:
+    """Bootstrap a (lower, upper) confidence band for a sample mean along axis 0.
+
+    samples: (n_samples, ...) — observations to average.
+    Returns (mean, lower, upper) each shaped like samples.mean(axis=0).
+    """
+    rng = np.random.default_rng(seed)
+    n   = samples.shape[0]
+    if n == 0:
+        return None, None, None
+    boot_means = np.empty((n_boot,) + samples.shape[1:], dtype=samples.dtype)
+    for b in range(n_boot):
+        idx           = rng.integers(0, n, size=n)
+        boot_means[b] = samples[idx].mean(axis=0)
+    alpha = (1.0 - ci) / 2.0
+    lo    = np.quantile(boot_means, alpha,       axis=0)
+    hi    = np.quantile(boot_means, 1.0 - alpha, axis=0)
+    return samples.mean(axis=0), lo, hi
 
 
 def smooth_gaussian(C: np.ndarray, sigma: float = 1.0) -> np.ndarray:

@@ -25,11 +25,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build LaTeX
+      # Main and supplementary have mutual xr-hyper cross-refs, so we build twice:
+      # 1) supplementary first → main.tex resolves \ref{fig:pca_3d}
+      # 2) main → supplementary resolves \ref{fig:clusters}
+      # 3) supplementary again to pick up main's labels in its bookmarks/links
+      - name: Build supplementary.tex (1st pass)
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: ${{ env.PAPER_DIR }}
+          root_file: supplementary.tex
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode -file-line-error
+
+      - name: Build main.tex
         uses: xu-cheng/latex-action@v3
         with:
           working_directory: ${{ env.PAPER_DIR }}
           root_file: ${{ env.MAIN_TEX }}
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode -file-line-error
+
+      - name: Rebuild supplementary.tex (now sees main.aux)
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: ${{ env.PAPER_DIR }}
+          root_file: supplementary.tex
           latexmk_use_xelatex: false
           args: -pdf -interaction=nonstopmode -file-line-error
 

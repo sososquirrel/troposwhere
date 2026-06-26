@@ -24,3 +24,24 @@ __pycache__/
 
 # ── Model registry (auto-generated, not source) ───────────────
 paper/model_comparison/models_registry.yaml
+
+# ── Archived / scratch material (local only) ─────────────────
+paper_5clusters/old_stuff/
+paper/manuscript.zip
+
+# ── Python package metadata (auto-generated) ─────────────────
+*.egg-info/
+
+# ── LaTeX build artifacts (regenerable from .tex) ────────────
+*.aux
+*.bbl
+*.bbl-SAVE-ERROR
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
