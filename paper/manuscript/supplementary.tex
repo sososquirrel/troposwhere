@@ -1,22 +1,39 @@
-\documentclass{article}
-\usepackage{graphicx} % Required for inserting images
-\usepackage{comment}
+\documentclass[11pt]{article}
+
+% ── Layout & typography ─────────────────────────────────────────────────
+\usepackage[margin=2.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{setspace}\setstretch{1.15}
+\usepackage{parskip}
+\usepackage{lineno}\linenumbers
+\usepackage[font=small,labelfont=bf]{caption}
+\setlength{\emergencystretch}{2em}
+
+% ── Math, figures, references ──────────────────────────────────────────
 \usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{comment}
 \usepackage{url}
+\usepackage{xcolor}
+\usepackage[colorlinks=true, allcolors=blue!50!black, citecolor=teal!60!black]{hyperref}
+\usepackage{xr-hyper}                             % cross-document refs (e.g. main text labels)
+\externaldocument{main}                            % reads main.aux if present
 \usepackage[
     backend=biber,
-    style=authoryear,   % Name-Year style
+    style=authoryear,
     sorting=nyt,
-    natbib=true         % <--- Add this to enable \citep and \citet
+    natbib=true
 ]{biblatex}
 \addbibresource{biblio.bib}
-%\usepackage{draftwatermark}
-%\SetWatermarkText{DRAFT}
-%\SetWatermarkScale{2.5}
 
 \graphicspath{{./}{figures/}{SI_figures/}{img/}}
+
+% Supplementary figures numbered S1, S2, ... (also picked up by xr-hyper in main.tex)
+\renewcommand{\thefigure}{S\arabic{figure}}
 
 
 \title{Supplementary Information \\
@@ -28,57 +45,6 @@ Convective Organization \\ as Markov Trajectories in Latent Space}
 
 \maketitle
 
-
-\begin{comment}
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{loss_functions}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{clusters_reconstruction}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{embedding distribution}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{pca_3d}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{precip_distribution}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{sensitiviy_to_cluster_nb}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{cold_pool_detection}
-    \caption{Caption}
-    \label{fig:loss_functions}
-\end{figure}
-\end{comment}
 
 \tableofcontents
 
@@ -132,7 +98,7 @@ As illustrated in Figure~\ref{fig:reconstruction}, the model is able to faithful
     \centering
     \includegraphics[width=\textwidth]{reconstruction.pdf}
     \caption{Examples of reconstructed and true isentropic mass flux diagrams for randomly selected snapshots from different latent states.
-Each column corresponds to a distinct latent state, with one randomly chosen time index per state. The top row shows reconstructions obtained by decoding the latent embedding, while the bottom row shows the corresponding ground-truth fields. All panels use the same color scale, highlighting the model’s ability to recover the dominant spatial structure, amplitude, and vertical organization of mass flux anomalies across a range of dynamical regimes.}
+Each column corresponds to a distinct latent state, with one randomly chosen time index per state. The top row shows reconstructions obtained by decoding the latent embedding, while the bottom row shows the corresponding ground-truth fields. All panels use the same color scale, highlighting the model's ability to recover the dominant spatial structure, amplitude, and vertical organization of mass flux anomalies across a range of dynamical regimes.}
     \label{fig:reconstruction}
 \end{figure}
 
@@ -140,23 +106,23 @@ Each column corresponds to a distinct latent state, with one randomly chosen tim
 
 
 
-\section{Sensitivity test to hyper parameters}
+\section{Sensitivity test to hyperparameters}
 \subsection*{Latent dimension}
 
-We compare the evolution of the reconstruction loss during training for models with different latent dimensionalities equal to 4, 8 (the one chosen) and 16. Increasing the latent dimension systematically reduces the reconstruction error and accelerates convergence, reflecting the increased expressive capacity of the latent space. However, beyond a moderate latent size, improvements become marginal, suggesting diminishing returns in reconstruction quality. This supports the choice of an intermediate latent dimension equal to 8 as a trade-off between representational power and model complexity. The logarithmic scale highlights early-epoch differences and stabilisation behaviour across configurations.
+We compare the evolution of the reconstruction loss during training for models with different latent dimensionalities equal to 4, 8 (the one chosen) and 16 (Fig.~\ref{fig:latent_dim_sensitivity}). Increasing the latent dimension systematically reduces the reconstruction error and accelerates convergence, reflecting the increased expressive capacity of the latent space. However, beyond a moderate latent size, improvements become marginal, suggesting diminishing returns in reconstruction quality. This supports the choice of an intermediate latent dimension equal to 8 as a trade-off between representational power and model complexity. The logarithmic scale highlights early-epoch differences and stabilisation behaviour across configurations.
 
 \begin{figure}
     \centering
     \includegraphics[width=0.7\textwidth]{latent_dim_sensitivity.pdf}
     \caption{Curves show the reconstruction loss as a function of epoch for models with varying latent space sizes. The loss is displayed on a logarithmic scale.}
-    \label{fig:latent_dim_sensitity}
+    \label{fig:latent_dim_sensitivity}
 \end{figure}
 
 
 
-\subsection*{Number of cluster}
+\subsection*{Number of clusters}
 
-We assess the sensitivity of the latent-space organisation to the prescribed number of discrete clusters by training models with 3, 5, and 10 latent states. Across all configurations, the separation between organised and unorganised trajectories remains robust, indicating that the inferred dynamical pathways are not an artefact of a particular cluster partitioning. This separation is already clearly captured when prescribing only three clusters, suggesting that a small number of states is sufficient to represent the dominant modes of variability. As the number of clusters increases, the latent states increasingly overlap along the leading axis of variability, making transitions between regimes less distinct. For five clusters, the overall structure remains similar, although the axis associated with precipitation variability appears less clearly defined (not shown). These results support the robustness of the identified pathways while highlighting the reduced interpretability associated with finer cluster partitions.
+We assess the sensitivity of the latent-space organisation to the prescribed number of discrete clusters by training models with 3, 5, and 10 latent states (Fig.~\ref{fig:cluster_sensitivity}). Across all configurations, the separation between organised and unorganised trajectories remains robust, indicating that the inferred dynamical pathways are not an artefact of a particular cluster partitioning. This separation is already clearly captured when prescribing only three clusters, suggesting that a small number of states is sufficient to represent the dominant modes of variability. As the number of clusters increases, the latent states increasingly overlap along the leading axis of variability, making transitions between regimes less distinct. For five clusters, the overall structure remains similar, although the axis associated with precipitation variability appears less clearly defined (not shown). These results support the robustness of the identified pathways while highlighting the reduced interpretability associated with finer cluster partitions.
 
 \begin{figure}
     \centering
@@ -166,6 +132,21 @@ Panels show the first two principal components of the latent representations for
     \label{fig:cluster_sensitivity}
 \end{figure}
 
+\subsection*{Three-dimensional PCA projection}
+
+The 2D PCA projection in the main text (Fig.~\ref{fig:clusters}) suggests partial overlap between some clusters. Expanding to three components shows that clusters which appear to overlap in 2D are separated along higher-order axes (Fig.~\ref{fig:pca_3d}).
+
+\begin{figure}
+    \centering
+    \IfFileExists{figures/pca_3d.pdf}{%
+        \includegraphics[width=\textwidth]{pca_3d.pdf}%
+    }{%
+        \framebox[0.6\textwidth]{\parbox[c][4cm][c]{0.55\textwidth}{\centering\itshape
+        Figure missing: regenerate \texttt{pca\_3d.pdf} by running \texttt{figures\_si.ipynb}.}}%
+    }
+    \caption{\textbf{Three-dimensional PCA projection of the latent space.} All three pairwise projections (PCA~1 vs.~PCA~2, PCA~1 vs.~PCA~3, PCA~2 vs.~PCA~3) of the leading three principal components, coloured by latent state. Clusters that appear to overlap in the 2D projection used in the main text are separated along higher-order components.}
+    \label{fig:pca_3d}
+\end{figure}
 
 
 \section{Contrastive regularization of state assignments}
@@ -281,7 +262,7 @@ Let $x_t \in \mathcal{X}$ denote the full convective state of the system at time
 \]
 where $\pi_i(x_t) = \mathbb{P}(s_t = i \mid x_t)$ denotes the probability of assignment to convective state $i$. The components of $\pi$ thus define a finite set of learned, smooth observables $f_i = \pi_i \circ E$, parameterized by the VAE encoder $E$.
 
-Under the assumption that the evolution of these observables is  approximately Markovian, the Koopman operator $\mathcal{K}$ acts on an observable $f$ according to
+Under the assumption that the evolution of these observables is approximately Markovian, the Koopman operator $\mathcal{K}$ acts on an observable $f$ according to
 \[
 (\mathcal{K} f)(x_t) = \mathbb{E}\!\left[ f(x_{t+1}) \mid x_t \right].
 \]
@@ -291,9 +272,18 @@ Restricting $\mathcal{K}$ to the finite-dimensional subspace spanned by $\{ f_i 
 \]
 where $T$ represents the action of the stochastic Koopman operator projected onto the subspace defined by the VAE-learned observables.
 
-The spectral properties of $T$ provide insight into the intrinsic dynamics of the reduced system. The leading eigenvalue $\lambda_1 = 1$ corresponds to the stationary distribution over convective states, while subdominant eigenvalues characterize slowly decaying modes associated with regime persistence and long-lived correlations. Complex-conjugate eigenvalue pairs  indicate oscillatory behavior or preferred cyclic transition pathways in the reduced state space.
+The spectral properties of $T$ provide insight into the intrinsic dynamics of the reduced system. The leading eigenvalue $\lambda_1 = 1$ corresponds to the stationary distribution over convective states, while subdominant eigenvalues characterize slowly decaying modes associated with regime persistence and long-lived correlations. Complex-conjugate eigenvalue pairs indicate oscillatory behavior or preferred cyclic transition pathways in the reduced state space.
 
 This formulation establishes a principled connection between the VAE-based universal approximation of Koopman observables and data-driven stochastic modeling of convective variability, enabling the identification of dominant regimes, transition pathways, and intrinsic time scales of convective organization.
+
+Time series of individual realizations confirm that system trajectories cluster along the two dominant pathways identified from the leading eigenmode of $T$ (Fig.~\ref{fig:trajectories}); these are the same trajectories overlaid on the latent space in the main text.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{fig8_trajectories.pdf}
+    \caption{\textbf{Example trajectories.} Domain-wide precipitable water (blue, left axis) and precipitation (red, right axis) over two 10-hour intervals, with the latent state at each time step indicated by the colored stripe above each panel. \textbf{(a)} Strongly-organized pathway. \textbf{(b)} Weakly-organized pathway.}
+    \label{fig:trajectories}
+\end{figure}
 
 \section{Canonical representations of latent states}
 
@@ -303,7 +293,7 @@ For the isentropic mass flux, we compute the mean physical field $\langle x \ran
 
 Figure~\ref{fig:state_means} shows that $\langle x \rangle$ and $\mathrm{Dec}(\langle z \rangle)$ provide consistent canonical representations of each latent state. Their close agreement indicates that the latent space organizes samples in a physically meaningful manner, such that state-specific structures are preserved under both averaging procedures. As expected for a variational autoencoder, the decoded representations exhibit a mild smoothing relative to the direct physical averages, while retaining the dominant vertical and isentropic patterns characteristic of each state.
 
-To further illustrate the physical coherence of the latent states, we also show multi-variable canonical composites constructed by averaging additional atmospheric fields over the same representative samples for each state. A detailed description of the state construction and averaging procedures, including averages performed along both spatial and thermodynamic axes, is provided in the main text.
+To further illustrate the physical coherence of the latent states, we also show multi-variable canonical composites constructed by averaging additional atmospheric fields over the same representative samples for each state (Fig.~\ref{fig:state_multivar}). A detailed description of the state construction and averaging procedures, including averages performed along both spatial and thermodynamic axes, is provided in the main text.
 
 
 \begin{figure}
@@ -380,7 +370,7 @@ where the sum is taken over all cold pools present at time $t$. In addition to t
 anomalous, and standardized versions are computed using the temporal mean and standard deviation.
 
 
-\section{Autocorrelation of state indicators in a Markov chain.}
+\section{Autocorrelation of state indicators in a Markov chain}
 
 Let $\{X_t\}_{t\ge 0}$ be a discrete-time, stationary Markov chain on a finite
 state space $\{1,\dots,K\}$ with transition matrix $\mathbf{T}$ and stationary

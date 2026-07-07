@@ -1,17 +1,36 @@
-\documentclass{article}
-\usepackage{graphicx} % Required for inserting images
-\usepackage{comment}
+\documentclass[11pt]{article}
+
+% ── Layout & typography ─────────────────────────────────────────────────
+\usepackage[margin=2.2cm]{geometry}              % tighter margins (default ~3.5cm)
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}                              % modern Computer Modern
+\usepackage{microtype}                            % subtle typographic improvements
+\usepackage{setspace}\setstretch{1.15}            % a touch more line spacing
+\usepackage{parskip}                              % blank line between paragraphs, no indent
+\usepackage{lineno}\linenumbers                   % line numbers (for reviewers)
+\usepackage[font=small,labelfont=bf]{caption}     % small captions with bold "Figure N."
+\setlength{\emergencystretch}{2em}                % reduce Overfull \hbox warnings
+
+% ── Math, figures, references ──────────────────────────────────────────
 \usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{comment}
 \usepackage{url}
+\usepackage{xcolor}                               % needed for blue!50!black, teal!60!black, etc.
+\usepackage[colorlinks=true, allcolors=blue!50!black, citecolor=teal!60!black]{hyperref}
+\usepackage{xr-hyper}                             % cross-document refs (e.g. SI labels)
+\externaldocument{supplementary}                  % reads supplementary.aux if present
 \usepackage[
     backend=biber,
-    style=authoryear,   % Name-Year style
+    style=authoryear,
     sorting=nyt,
-    natbib=true         % <--- Add this to enable \citep and \citet
+    natbib=true
 ]{biblatex}
 \addbibresource{biblio.bib}
+
+% ── Optional draft watermark ───────────────────────────────────────────
 %\usepackage{draftwatermark}
 %\SetWatermarkText{DRAFT}
 %\SetWatermarkScale{2.5}
@@ -28,31 +47,36 @@
 
 
 \section*{Abstract}
-High-dimensional dynamical systems, such as convective storms, pose fundamental challenges for reduced-order modeling due to their complex, stochastic evolution across multiple scales. We present a data-driven framework for stochastic reduced-order modeling of convective dynamics that combines Koopman operator theory with discrete-state Markov chains. The method learns low-dimensional representations of convective mass flux directly from high-resolution simulations by encoding isentropic mass-flux profiles into a latent space where evolution is approximated as linear and probabilistic. Applied to cloud-resolving simulations under fixed vertical wind shear, the framework identifies an eight-dimensional latent manifold that captures convective variability through transitions between a small number of dominant states. The learned Markov transition matrices reveal regime-dependent pathways and clear distinctions between weakly and strongly organized convection. Deviations from Markovianity in organized regimes expose the role of internal feedbacks—particularly cold-pool dynamics—as sources of effective memory. Conditioning the state space on cold-pool intensity restores Markovian behavior, demonstrating that explicitly embedding internal processes improves model fidelity. The results indicate that convective diversity arises from the range of dynamical trajectories supported by the environment rather than from distinct states alone.
+Convective storms are stochastic, high-dimensional systems whose evolution resists compact description. Here we focus on their \emph{internal} variability---the diversity of storm evolution that emerges under a fixed large-scale environment rather than from changes in the forcing itself. We introduce a framework that treats convective organization dynamically: an encoder maps isentropic mass-flux profiles into a low-dimensional latent space, the latent space is partitioned into discrete convective states, and transitions between states are modelled as a Markov chain. Applied to cloud-resolving simulations of squall lines under fixed vertical wind shear, the model identifies eight latent dimensions and seven states recovering the canonical phases of the convective life cycle. The learned dynamics expose two pathways: a direct route into sustained deep convection and a slower route through weakly organized phases. Departures from strict Markovianity in the organized regime expose the role of internal feedbacks---particularly cold-pool dynamics---as sources of effective memory; conditioning on cold-pool intensity at the starting time partly restores Markovian behaviour, suggesting that explicitly embedding such internal processes improves model fidelity. The results indicate that convective diversity arises from the range of dynamical trajectories supported by the environment rather than from distinct states alone, and offer a learned, stochastic alternative to prescribed multi-cloud parameterizations.
 
 \section{Introduction}
 
-High-dimensional dynamical systems — defined by many nonlinearly coupled degrees of freedom whose interactions produce complex, often stochastic evolution — arise across the physical sciences. Convective storms are a canonical example: their dynamics involve multiscale couplings between thermodynamics, fluid motion, and microphysics, encoded in high-dimensional state variables from satellite observations \citep{hu2020observed, fiolleau2024database} or cloud-resolving simulations \citep{feng2025mesoscale}. Despite this complexity, convection exerts outsized control on vertical mass, energy, and moisture transport, making its representation in coarse-grained climate models a persistent challenge, especially under warming \citep{yang2023impact, bolot2025no, prein2022towards, chakraborty2023overview}.
+Convective storms are high-dimensional dynamical systems: nonlinear couplings among thermodynamics, fluid motion and microphysics generate complex, multiscale and intrinsically stochastic evolution. Whether resolved by cloud-resolving simulations \citep{feng2025mesoscale} or described by satellite observations \citep{hu2020observed, fiolleau2024database}, this complexity has so far resisted any compact, dynamically faithful representation. And yet convection exerts an outsized control on vertical transports of mass, energy and moisture, so its representation in coarse-grained climate models remains a persistent challenge---particularly under warming \citep{yang2023impact, bolot2025no, prein2022towards, chakraborty2023overview}. A further difficulty is that the convective response to a \emph{fixed} large-scale forcing is not a single outcome but a broad distribution of storm evolutions \citep{abramian2025key}; this \emph{internal} variability, intrinsic to the convection rather than inherited from changes in the environment, is the focus of the present work.
 
-The high dimensionality of convective systems has historically motivated drastic simplifications. Stochastic multi-cloud models \citep{khouider2006multicloud, majda2008stochastic, khouider2010stochastic} demonstrated that convective populations can be approximated as a Markov chain over a small number of prescribed cloud types — shallow, congestus, and deep — with transition rules on a coarse lattice. This framework captures the birth, growth, and decay of storm populations and horizontal variability in cloud cover. However, precisely because the states are chosen a priori rather than learned from the data, these models cannot represent the diversity of vertical mass-flux profiles that arise for a given cloud geometry. The limitation matters most during extreme events \citep{MullerYukari19}, where the dynamical component controls precipitation change \citep{singh2012upward, abramian2023extreme, wang2022convective}: bottom- or top-heavy vertical structures strongly influence the duration and intensity of extreme rainfall \citep{li2025bimodal}.
+This complexity has historically motivated drastic simplifications. Stochastic multi-cloud models \citep{khouider2006multicloud, majda2008stochastic, khouider2010stochastic} approximate convective populations as a Markov chain over a small number of prescribed cloud types---shallow, congestus and deep---with transition rules on a coarse lattice. Such models capture the birth, growth and decay of storm populations as well as the horizontal variability of cloud cover. Because the states are chosen \emph{a priori} rather than learned from data, however, they cannot resolve the diversity of vertical mass-flux profiles that arise for a given cloud geometry. This limitation is most consequential during extreme events \citep{MullerYukari19}, where the dynamical component governs precipitation change \citep{singh2012upward, abramian2023extreme, wang2022convective}: whether a system is bottom- or top-heavy strongly influences the duration and intensity of extreme rainfall \citep{li2025bimodal}.
 
-More generally, low-dimensional descriptions of high-dimensional systems are often weakly connected to the underlying dynamics: the variables chosen to describe the flow are not necessarily the variables in which the dynamics simplify. Koopman operator theory \citep{koopman1931hamiltonian, brunton2021modern} offers a principled resolution to this problem. Rather than seeking a reduced model directly in the space of physical variables — where nonlinear couplings make any low-dimensional truncation dynamically inconsistent — one constructs observables, nonlinear transformations of the physical state, in which the dynamics become exactly linear. The nonlinear complexity is not eliminated but transferred to the geometry of the observable space, so that the projected evolution is linear by construction, regardless of the complexity of the original system. In practice, these observables must be approximated from data. Recent work recasts this as a representation-learning problem \citep{lusch2018deep}: an encoder maps the physical state into a latent space where dynamics are constrained to be linear, while a decoder ensures fidelity to the original state. The approach extends to chaotic and stochastic dynamics \citep{nathaniel2026generative}.
+More generally, low-dimensional descriptions of high-dimensional systems are often weakly connected to the underlying dynamics, because the variables chosen to describe the flow are not necessarily the ones in which the dynamics simplify. Koopman operator theory \citep{koopman1931hamiltonian, brunton2021modern} offers a principled resolution. Rather than projecting the dynamics directly onto a small set of physical variables---where nonlinear couplings make any truncation dynamically inconsistent---one constructs \emph{observables}: nonlinear transformations of the physical state in which the dynamics become exactly linear. The nonlinear complexity is not eliminated; it is transferred to the geometry of the observable space, so that the projected evolution is linear by construction regardless of how complex the underlying system is. In practice, the right observables must be approximated from data, a problem recently recast as representation learning \citep{lusch2018deep}: an encoder maps the physical state into a latent space where the dynamics are constrained to be linear, while a decoder ensures fidelity to the original state. Recent extensions cover chaotic and stochastic dynamics as well \citep{nathaniel2026generative}.
 
-We adopt this framework and make two specific choices that define our approach. First, we represent the convective flow in isentropic coordinates \citep{pauluis2013isentropic}. Isentropic analysis reorganizes mass flux according to equivalent potential temperature, yielding a thermodynamically consistent description that preserves energetic structure and filters reversible adiabatic motions. This provides a high-dimensional, physically grounded input to the encoder — not itself a reduced representation, but a structured substrate from which dynamically relevant observables can be extracted.
+We build on this framework and make two specific choices that distinguish our approach. First, we cast the convective flow in isentropic coordinates \citep{pauluis2013isentropic}, which reorganize mass flux according to moist static energy. This yields a thermodynamically consistent representation that preserves energetic structure and filters reversible adiabatic motions. The isentropic field is itself high-dimensional---it is not a reduced description---but it provides a physically grounded substrate from which dynamically relevant observables can be extracted by the encoder.
 
-Second, we depart from Koopman autoencoders that enforce deterministic linear dynamics. Instead, we partition the learned latent space into a finite set of discrete states through clustering \citep{kaiser2014cluster, souza2024representing}, and model transitions between them probabilistically. The resulting reduced-order model is a Markov chain on state occupation probabilities: finite-dimensional, linear, and memoryless by construction. Unlike existing stochastic convection models, the discrete states are neither prescribed nor heuristic — they are learned jointly with the encoding.
+Second, we depart from Koopman autoencoders that enforce \emph{deterministic} linear dynamics. Instead, we partition the learned latent space into a finite set of discrete states through joint clustering \citep{kaiser2014cluster, souza2024representing} and model transitions between them probabilistically. The reduced-order model that emerges is a Markov chain on state occupation probabilities---finite-dimensional, linear, and memoryless by construction. Unlike existing stochastic convection models, the discrete states are neither prescribed nor heuristic: they are learned jointly with the encoder, so that the partition is shaped by the very dynamics it must represent.
 
-This construction bridges two traditions. Stochastic multi-cloud models operate on prescribed states with limited dynamical diversity. Koopman autoencoders learn expressive representations but typically enforce deterministic dynamics. By combining learned discrete states with stochastic transitions, we obtain a model that is both physically interpretable and consistent with the irreducibly stochastic character of convective evolution.
+The construction bridges two traditions. Stochastic multi-cloud models operate on prescribed states with limited dynamical diversity; Koopman autoencoders learn expressive representations but typically enforce deterministic dynamics. Combining \emph{learned} discrete states with \emph{stochastic} transitions yields a model that is at once physically interpretable and consistent with the irreducibly stochastic character of convective evolution.
 
-We apply this framework to squall lines simulated with the System for Atmospheric Modeling (SAM) under controlled large-scale forcing, and address three questions: (i) What are the dominant convective mass-flux states accessible under a given forcing, here characterized by vertical wind shear? (ii) Can transitions between these states be modeled as a Markov chain, and do transition pathways differ between weakly and strongly organized convection? (iii) To what extent is convective variability memoryless, and where do internal feedbacks — cold-pool dynamics in particular — introduce effective memory?
+We apply this framework to squall lines simulated with the System for Atmospheric Modeling (SAM) under controlled large-scale forcing and address three questions:
+\begin{enumerate}
+\item[(i)] What are the dominant convective mass-flux states accessible under a given forcing, here characterized by vertical wind shear?
+\item[(ii)] Can transitions between these states be approximated by a Markov chain, and do the pathways differ between weakly and strongly organized convection?
+\item[(iii)] To what extent is convective variability memoryless, and where do internal feedbacks---cold-pool dynamics in particular---introduce effective memory?
+\end{enumerate}
 
-Section 2 describes the methodology. Section 3 presents results. Section 4 discusses implications for convective modeling and concludes.
+The remainder of the paper is organized as follows. Section~\ref{sec:methods} describes the methodology. Section~\ref{sec:results} presents the results. Section~\ref{sec:discussion} discusses implications for convective modelling and concludes.
 
-\section{Methods}
+\section{Methods}\label{sec:methods}
 
 \subsection{Idealized cloud-resolving simulations}
 
-To examine the response of convection to fixed vertical wind shear, we perform idealized cloud-resolving simulations using the System for Atmospheric Modeling (SAM) \cite{khairoutdinov2003}. Following \cite{muller2013impact}, a low-level shear profile is imposed following previous idealized studies (see also \cite{rotunno1988theory, houze1977structure, robe2001effect}). The wind profile is linear, with a basal velocity of $8.5\,\mathrm{m\,s^{-1}}$ and a shear depth of $1\,\mathrm{km}$. This value is deliberately suboptimal relative to the shear magnitude ($\sim10\,\mathrm{m\,s^{-1}}$) that maximizes convective organization, in order to enhance sensitivity to internal variability (\cite{abramian2022shear}). In this regime, the balance between shear and cold-pool dynamics is more unstable, and variations in cold-pool properties exert a substantial control on convective development.
+To examine the response of convection to fixed vertical wind shear, we perform idealized cloud-resolving simulations using the System for Atmospheric Modeling (SAM) \cite{khairoutdinov2003}. Following \cite{muller2013impact}, a low-level shear profile is imposed (see also \cite{rotunno1988theory, houze1977structure, robe2001effect}). The wind profile is linear, with a basal velocity of $8.5\,\mathrm{m\,s^{-1}}$ and a shear depth of $1\,\mathrm{km}$. This value is deliberately suboptimal relative to the shear magnitude ($\sim10\,\mathrm{m\,s^{-1}}$) that maximizes convective organization, in order to enhance sensitivity to internal variability (\cite{abramian2022shear}). In this regime, the balance between shear and cold-pool dynamics is more unstable, and variations in cold-pool properties exert a substantial control on convective development.
 
 The model domain spans $128\,\mathrm{km} \times 128\,\mathrm{km}$ horizontally and extends from the surface to $17\,\mathrm{km}$ in the vertical, with enhanced resolution in the boundary layer. A sponge layer is applied near the model top to absorb upward-propagating gravity waves. Microphysical processes are represented using a single-moment scheme. The simulation is first integrated for 30 days to reach radiative--convective equilibrium and then continued for an additional 27 days for analysis. Model output is saved at 2-min intervals, yielding approximately $2\times10^{4}$ time steps, and includes both two- and three-dimensional fields. Under the imposed shear, convection self-organizes into squall-line structures oriented perpendicular to the shear direction, as illustrated in Fig.~\ref{fig:simu_isentrop}. The system alternates between quiescent phases and episodes of strong organization. Despite identical large-scale forcing, pronounced variability emerges in the structure, intensity, and persistence of the organized convective systems.
 
@@ -102,73 +126,62 @@ To this end, we introduce a reduced-order stochastic model that combines a varia
     \label{fig:model}
 \end{figure}
 
-\subsubsection{Variational autoencoder Backbone}
+\subsubsection{Variational autoencoder backbone}
 
-Each isentropic mass-flux diagram at time $t$, denoted $X_t$, is encoded into a low-dimensional latent representation using a variational autoencoder. The encoder maps $X_t$ to a Gaussian distribution in latent space,
+Each isentropic mass-flux diagram at time $t$, denoted $X_t$, is encoded into a $d$-dimensional latent representation by a variational autoencoder. The encoder outputs a diagonal Gaussian posterior over the latent variable $z\in\mathbb{R}^d$,
 \[
-q(z \mid X_t) = \mathcal{N}(\mu, \sigma^2),
+q(z \mid X_t) = \mathcal{N}\!\left(\mu(X_t),\,\mathrm{diag}(\sigma^2(X_t))\right),
 \]
-where $\mu$ and $\sigma$ denote the mean and standard deviation of the $d$-dimensional latent variables. A latent sample $z$ drawn from this distribution is then decoded to produce a reconstruction $\hat{X}_t$ of the original diagram. Regularization of the latent variables is enforced through a Kullback--Leibler divergence penalty that constrains the learned posterior toward a unit Gaussian prior. This variational constraint yields a smooth latent space in which nearby points correspond to similar convective configurations, enabling meaningful interpolation and supporting a stable, probabilistic description of convective evolution.
+where $\mu(X_t)$ and $\sigma(X_t)$ are the mean and standard-deviation vectors produced by the encoder network. A latent sample $z\sim q(z|X_t)$ (drawn via the reparameterization trick) is decoded to produce a reconstruction $\hat{X}_t$, and reconstruction fidelity is enforced through the per-pixel summed squared error $\|X_t-\hat{X}_t\|^2$. The learned posterior is regularized toward an isotropic standard-Gaussian prior $p(z)=\mathcal{N}(0,I)$ through the closed-form Kullback--Leibler divergence $D_{\mathrm{KL}}(q\|p) = \tfrac{1}{2}\sum_{i=1}^d\!\left(\mu_i^2+\sigma_i^2-\log\sigma_i^2-1\right)$. This regularization yields a smooth latent space in which nearby points correspond to similar convective configurations, enabling meaningful interpolation and supporting a stable, probabilistic description of convective evolution.
 
 \subsubsection{Latent Space Partitioning}
 
-The continuous latent representation is mapped onto a finite set of $K=7$ discrete convective states through a neural network that performs a soft partitioning of latent space. The number of clusters is found empirically and a sensitivity test can be found in Supplementary Information. At each time $t$, the model outputs a probability vector
-\[
-s_t = \{ s_t(1), \ldots, s_t(K) \},
-\]
-where $s_t(k)$ denotes the probability that the system occupies state $k$. This mapping can be interpreted as a data-driven clustering mechanism, in which close latent representations are grouped into dynamically meaningful regimes, although this clustering actually affect and shape the latent space in return. The assignment is probabilistic rather than deterministic, allowing for uncertainty and overlap between states, which is essential in transitional or weakly organized configurations.
+The continuous latent representation is mapped onto a finite set of $K=7$ discrete convective states through a small neural network that takes $z_t$ as input and outputs a probability vector via a softmax head, $s_t = \mathrm{softmax}(g(z_t)) \in \Delta^{K-1}$, with $s_t(k)\ge 0$ and $\sum_k s_t(k)=1$. The number of clusters $K$ is set empirically (cluster-count sensitivity in Fig.~\ref{fig:cluster_sensitivity}). This mapping can be interpreted as a data-driven clustering mechanism, in which close latent representations are grouped into dynamically meaningful regimes. Importantly, because the clustering network is trained jointly with the encoder, it does not merely partition a fixed latent space but actively reshapes the latent geometry to favour cluster-consistent representations. The assignment is probabilistic rather than deterministic, allowing for uncertainty and overlap between states, which is essential in transitional or weakly organized configurations.
 
-To prevent state collapse—whereby most samples are assigned to a small subset of states—we regularize the state assignment using a contrastive objective that encodes prior physical knowledge about the input. Specifically, we introduce a contrastive loss based on the structural similarity of isentropic mass-flux anomaly fields. Each sample is discretized into three regions using fixed thresholds $\{-1.5,\,1.5\}$, corresponding to negative anomalies, near-neutral values, and positive anomalies. From these regions, binary masks are constructed and compared using a macro-averaged Dice coefficient, which measures the spatial overlap of positive and negative anomaly structures while intentionally discarding information about anomaly amplitude or fine-scale intensity. For randomly sampled pairs $(i,j)$ within a batch, the Dice similarity $\mathrm{Dice}(i,j)$ defines a notion of physical proximity. Pairs with high structural similarity are encouraged to share the same latent state, while structurally dissimilar pairs are encouraged to occupy different states. This is implemented through a soft contrastive loss that penalizes disagreement for similar pairs (cohesion) and agreement for dissimilar pairs (separation), with a smooth transition between the two regimes. An additional mid-range penalty discourages uncertain assignments when the similarity is ambiguous. We denote this loss term as $\mathcal{L}_{\mathrm{Dice}}$ (details in Supplementary Information).
+To prevent state collapse—whereby most samples are assigned to a small subset of states—we regularize the state assignment using a contrastive objective that encodes prior physical knowledge about the input. Specifically, we introduce a contrastive loss based on the structural similarity of isentropic mass-flux anomaly fields. Each sample is discretized into three regions using fixed thresholds $\{-1.5,\,1.5\}$, corresponding to negative anomalies, near-neutral values, and positive anomalies. From these regions, binary masks are constructed and compared using a macro-averaged Dice coefficient, which measures the spatial overlap of positive and negative anomaly structures while intentionally discarding information about anomaly amplitude or fine-scale intensity. For randomly sampled pairs $(i,j)$ within a batch, the Dice similarity $\mathrm{Dice}(i,j)$ defines a notion of physical proximity. Pairs with high structural similarity are encouraged to share the same latent state, while structurally dissimilar pairs are encouraged to occupy different states. This is implemented through a soft contrastive loss that penalizes disagreement for similar pairs (cohesion) and agreement for dissimilar pairs (separation), with a smooth transition between the two regimes. An additional mid-range penalty discourages uncertain assignments when the similarity is ambiguous. We denote this term as $\mathcal{L}_{\mathrm{Dice}}$ and adopt the convention that it is a \emph{similarity score} (larger when state assignments match the Dice-based structural similarity); accordingly, it enters the total loss with a negative sign so that maximizing similarity \emph{minimizes} the total objective. Full definition in Supplementary Information.
 
 \subsubsection{Markov transition dynamics}
 
 We assume that, at the temporal resolution of the simulations, the evolution of convection can be approximated as a first-order Markov process in state space. The transition probabilities are encoded in a transition matrix $T$, defined by
 \[
-T_{ij} = P(s_{t+\Delta t} = j \mid s_t = i).
+T_{ij} = P(s_{t+\Delta t} = j \mid s_t = i),
 \]
-This matrix captures the persistence of convective regimes, preferred transitions between states, and rare events such as the spontaneous onset or decay of organized convection. The model is designed to receive consecutive timesteps as input, $X_t$ and $X_{t+\Delta t}$, which are encoded using the same encoder into $z_t$ and $z_{t+1}$. The neural network that assigns states based on the latent space returns $s_t$ and $s_{t+\Delta t}$. The transition matrix is trained to predict $\hat{s}_{t+\Delta t} = T\cdot s_t$ in comparison to $s_{t+\Delta t}$.
+with rows that are non-negative and sum to unity (row-stochastic). The data are sampled every $\Delta t_\text{raw}=2\,\mathrm{min}$, but we evaluate transitions at $\Delta t = 5\,\Delta t_\text{raw} = 10\,\mathrm{min}$ (motivated in Section~\ref{sec:markov}). This matrix captures the persistence of convective regimes, preferred transitions, and rare events such as the onset or decay of organized convection. During training, the model receives frame pairs $(X_t, X_{t+\Delta t})$, encodes them into $(z_t, z_{t+\Delta t})$, and assigns states $(s_t, s_{t+\Delta t})$; $T$ is then fit so that $\hat{s}_{t+\Delta t} = T\, s_t$ matches $s_{t+\Delta t}$.
 
 \subsubsection{Joint optimization}
 
-The VAE, neural state-assignment network, and Markov transition matrix are trained jointly by minimizing the composite loss function
+The VAE, state-assignment network, and transition matrix are trained jointly by minimizing
 \[
 \mathcal{L} =
-\|X - \hat{X}\|^2
+\underbrace{\|X - \hat{X}\|^2}_{\text{reconstruction}}
 +
-\frac{1}{2}\sum_{i=1}^d
-\left(
-\mu_i^2 + \sigma_i^2 - \log \sigma_i^2 - 1
-\right)
+\underbrace{\tfrac{1}{2}\sum_{i=1}^d \left(\mu_i^2 + \sigma_i^2 - \log \sigma_i^2 - 1\right)}_{\text{KL to } \mathcal{N}(0,I)}
 -
-\mathcal{L}_{\mathrm{Dice}}
+\underbrace{\mathcal{L}_{\mathrm{Dice}}}_{\text{contrastive}}
 -
-\sum_{i,j}
-s_t(i)\, s_{t+1}(j)\, \log T_{ij}.
+\underbrace{\sum_{i,j} s_t(i)\, s_{t+1}(j)\, \log T_{ij}}_{\text{transition log-likelihood}}.
 \]
+Each term is weighted by a non-negative coefficient ($\beta$, $\lambda_{\mathrm{Dice}}$, $\gamma_{\mathrm{MC}}$); values, together with encoder/decoder architectures, are reported in the Supplementary Information.
 
-The first term is the reconstruction loss, ensuring that the reduced representation preserves the dominant spatial structure of the isentropic mass-flux diagrams. The second term is the Kullback--Leibler divergence between the learned latent distribution and a unit Gaussian prior, which regularizes the latent space and enforces continuity. The third term is the Dice-based contrastive loss that promotes physically coherent and balanced state assignments while preventing collapse onto a small number of regimes. The final term is the negative log-likelihood of observed state transitions under the Markov model and enforces dynamical consistency between consecutive time steps.
+These four terms exert competing pressures on the latent geometry. The KL term pulls samples toward an isotropic Gaussian, while the Dice and transition terms favor a multi-modal structure in which samples cluster into $K$ regions separated by both structural similarity and temporal predictability. The resulting equilibrium is a latent space whose envelope remains approximately Gaussian but whose interior carries $K=7$ resolvable clusters (Fig.~\ref{fig:clusters}).
 
-Together, these loss components ensure that the learned convective states are physically interpretable, statistically regularized, and dynamically predictive. The resulting framework provides a compact stochastic representation of convective variability, in which organized convection emerges as a probabilistic outcome constrained—but not uniquely determined—by the large-scale environment.
-
-Optimization is performed with AdamW (learning rate $5 \times 10^{-5}$, batch size $256$) for $512$ epochs, with gradient norm clipping at $1.0$. All loss components are accumulated as batch-size--weighted averages at the epoch level, and the best model is selected based on the minimum validation total loss. Detailed training, validation, and test loss decompositions, reconstruction diagnostics, and latent-space statistics are provided in the Supplementary Information.
-
+Optimization uses AdamW (learning rate $5\times10^{-5}$, batch size $256$) for $512$ epochs with gradient-norm clipping at $1.0$; the best model is selected by minimum validation loss. Loss decompositions (Fig.~\ref{fig:loss_curves}) and reconstruction diagnostics (Fig.~\ref{fig:reconstruction}) are provided in the Supplementary Information.
 
 
-\section{Results}
+
+\section{Results}\label{sec:results}
 
 \subsection{Physical interpretation of the latent space}
 
-The model compresses time series of isentropic mass-flux fields—used here as a compact description of the convective state—into a time series of latent vectors $\mathbf{z}(t)\in\mathbb{R}^8$. Each time step is subsequently assigned to a discrete convective state.
+The model compresses time series of isentropic mass-flux fields---used here as a physically grounded representation of the convective state---into a time series of latent vectors $\mathbf{z}(t)\in\mathbb{R}^8$, with each time step assigned to one of seven discrete convective states.
 
 \paragraph{Latent-space structure revealed by PCA.}
 
-The variational autoencoder is trained to reconstruct the mass-flux fields while regularizing the latent distribution toward an isotropic Gaussian prior. As a result, individual latent coordinates have no intrinsic physical meaning, and physically relevant variability is not expected to align with single latent dimensions.
-
-To extract the dominant modes of variability in the learned representation, we apply principal component analysis (PCA) to the latent vectors $\mathbf{z}(t)$. The resulting projection reveals a structured organization in which discrete convective states occupy distinct regions of the dominant variance subspace (Fig.~\ref{fig:clusters}). The first two principal components explain $22\%$ and $17\%$ of the total latent variance, respectively, indicating that a limited number of emergent degrees of freedom captures a substantial fraction of the learned variability. A three-dimensional PCA projection, shown in the Supplementary Material, confirms that clusters with apparent overlap in two dimensions are separated along higher-order components.
+A natural question is whether the latent space carries any physical meaning. There is no guarantee that it should: no physical constraint was imposed during training---the VAE is regularized only toward an isotropic Gaussian, and the seven discrete states are assigned without reference to intensity, organization, or any other diagnostic. To probe the structure of the latent space, we apply PCA to the latent vectors $\mathbf{z}(t)$ and examine how the discrete clusters are arranged along its dominant modes of variability. The first two components explain $22\%$ and $17\%$ of the variance, respectively (Fig.~\ref{fig:clusters}); a three-dimensional projection (Supplementary Information, Fig.~\ref{fig:pca_3d}) confirms that clusters overlapping in 2D are separated along higher-order components.
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.75\textwidth]{clusters.pdf}
+    \includegraphics[width=0.75\textwidth]{fig3_clusters.pdf}
     \caption{\textbf{Latent-space organization.} PCA projection of the latent space colored by cluster assignment. Each point corresponds to one time step; trajectories illustrate the time evolution over 5~h.}
     \label{fig:clusters}
 \end{figure}
@@ -181,14 +194,14 @@ In contrast, the second principal component shows little correlation with precip
 
 \begin{figure}
     \centering
-    \includegraphics[width=0.95\linewidth]{latent_axis.pdf}
+    \includegraphics[width=0.95\linewidth]{fig4_latent_axis.pdf}
     \caption{\textbf{Physical interpretation of latent variability.} PCA projection colored by (A) mean precipitation and (B) organization index. (C--D) Joint distributions of the first two principal components with the corresponding diagnostics.}
     \label{fig:axis_var}
 \end{figure}
 
 \paragraph{Dynamical and thermodynamic signatures of latent states.}
 
-If the latent clusters correspond to physically meaningful convective regimes, they should be associated with systematic differences in vertical mass transport and thermodynamic structure. Representative isentropic mass-flux fields for each cluster are shown in Supplementary Fig.~S3.
+If the latent clusters correspond to physically meaningful convective regimes, they should be associated with systematic differences in vertical mass transport and thermodynamic structure. Representative isentropic mass-flux fields for each cluster are shown in Supplementary Information (Fig.~\ref{fig:state_means}).
 
 Let $M(h,z,t)$ denote the isentropic mass flux at time $t$, height $z$, and moist static energy $h$. For each cluster $c$, we define the cluster-mean vertically integrated positive and negative mass fluxes,
 \begin{equation}
@@ -209,25 +222,53 @@ M^{\pm}_c(z)-\overline{M}^{\pm}(z),
 \Delta^{+}_c(z)-\Delta^{-}_c(z).
 \end{equation}
 
-The resulting vertical profiles (Fig.~\ref{fig:vertical_profiles}) reveal clear dynamical distinctions between clusters. States separated primarily along the intensity axis differ mainly in the magnitude of both upward and downward mass flux throughout the troposphere. Cluster~2 exhibits weak updrafts and downdrafts, consistent with shallow or weak convection, whereas Cluster~3 shows enhanced updraft--downdraft coupling characteristic of intense, precipitation-driven convection. Cluster~6 displays the strongest net upward mass transport over much of the troposphere, consistent with sustained deep convection.
+The resulting vertical profiles (Fig.~\ref{fig:vertical_profiles}) reveal clear dynamical distinctions between clusters. States separated primarily along the intensity axis differ mainly in the magnitude of both upward and downward mass flux throughout the troposphere. Cluster~3 exhibits weak updrafts and downdrafts, consistent with shallow or suppressed convection, whereas Cluster~4 shows enhanced updraft--downdraft coupling characteristic of intense, precipitation-driven convection. Cluster~6 displays moderate, broadly distributed up- and downdrafts with limited vertical coherence, consistent with weakly-organized, popcorn-like convection. Cluster~7 displays the strongest net upward mass transport over much of the troposphere, consistent with sustained deep convection.
 
 \begin{figure}
     \centering
-    \includegraphics[width=\textwidth]{vertical_profiles.pdf}
+    \includegraphics[width=0.8\textwidth]{fig5_vertical_profiles.pdf}
     \caption{\textbf{Cluster-averaged vertical mass-flux anomalies.} Positive, negative, and net anomalies relative to the simulation-wide mean.}
     \label{fig:vertical_profiles}
 \end{figure}
 
-Thermodynamic differences associated with convective organization are evident in the distribution of mass-flux anomalies across moist static energy (Fig.~\ref{fig:mse_profiles}). Organized states, notably Cluster~6, exhibit enhanced positive mass flux at high moist static energy, indicative of reduced entrainment and enhanced buoyancy within coherent convective structures. Less organized states show anomalies concentrated at lower energy levels, consistent with stronger entrainment and more transient convection.
+Thermodynamic differences associated with convective organization are evident in the distribution of mass-flux anomalies across moist static energy (Fig.~\ref{fig:mse_profiles}). Organized states, notably Cluster~7, exhibit enhanced positive mass flux at high moist static energy, indicative of reduced entrainment and enhanced buoyancy within coherent convective structures. Less organized states show anomalies concentrated at lower energy levels, consistent with stronger entrainment and more transient convection.
 
 \begin{figure}
     \centering
-    \includegraphics[width=\textwidth]{mse_profiles.pdf}
+    \includegraphics[width=\textwidth]{fig6_mse_profiles.pdf}
     \caption{\textbf{Cluster-averaged moist static energy--resolved mass-flux anomalies.}}
     \label{fig:mse_profiles}
 \end{figure}
 
-Together, these results show that the VAE latent space organizes convective variability along two emergent and physically interpretable axes—intensity and organization—and that the resulting discrete latent states correspond to dynamically and thermodynamically distinct convective regimes.
+Together, these results show that the VAE latent space organizes convective variability along two emergent and physically interpretable axes—intensity and organization—and that the resulting discrete latent states correspond to dynamically and thermodynamically distinct convective regimes. Table~\ref{tab:state_summary} consolidates the per-cluster numerical and physical characterization.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}c l c p{0.58\textwidth}@{}}
+\hline
+State & Name & $\pi$ (\%) & Physical signature \\
+\hline
+1 & \emph{Transient}      &  4.6 & rare, short-lived; faint mass-flux anomalies; no clear life-cycle role \\
+2 & \emph{Bridge}         &  3.5 & weak mid-level updrafts; preferred gateway between organized and disorganized regimes \\
+3 & \emph{Quiescent}      & 36.4 & suppressed/shallow convection; weak up- and down-drafts; dry background atmosphere \\
+4 & \emph{Mature}         & 19.1 & strongly coupled updraft--downdraft column; heavy precipitation; cold-pool generation \\
+5 & \emph{Outlier}        &  4.0 & rare, short-lived; weakly distinguishable mass-flux signature \\
+6 & \emph{Popcorn}        & 19.7 & scattered, weakly-organized shallow-to-congestus convection; moderate precipitation \\
+7 & \emph{Organized deep} & 12.7 & deep, sustained updraft cores with extensive stratiform downdrafts; squall-line-like organization \\
+\hline
+\end{tabular}
+\caption{\textbf{Summary of the seven latent convective states.}
+$\pi_i$ is the stationary probability of state~$i$ (the right-eigenvector of $\mathbf{T}$ associated with the unit eigenvalue, satisfying $\mathbf{T}\boldsymbol{\pi}=\boldsymbol{\pi}$; Eq.~\ref{eq:canon}). The chain's dynamical relaxation is governed by the six subdominant \emph{eigenmodes} of $\mathbf{T}$ (not by the seven clusters individually), with physical time scales $\tau_k = -\Delta t / \log|\lambda_k|$ where $\Delta t = 10\,\mathrm{min}$ is the chain step and the index $k$ labels the eigenmode (not a cluster):
+$\tau_2 = 144\,\mathrm{min}\,(2.4\,\mathrm{h})$,
+$\tau_3 = 63\,\mathrm{min}\,(1.0\,\mathrm{h})$,
+$\tau_4 = 53\,\mathrm{min}\,(0.9\,\mathrm{h})$,
+$\tau_5 = 37\,\mathrm{min}\,(0.6\,\mathrm{h})$,
+$\tau_6 = \tau_7 = 26\,\mathrm{min}\,(0.4\,\mathrm{h})$.
+The autocorrelation of any cluster~$i$ is a sum of these exponentials weighted by the cluster's amplitude in each eigenvector $\mathbf{v}_k$ (Eq.~\ref{eq:autocor}), with the leading mode $\tau_2$ setting the longest decay (Fig.~\ref{fig:autocorrelation}). Clusters with strong projection on $\mathbf{v}_2$ (notably 3, 4, 6, 7) inherit a $\sim$2-hour persistence; clusters that project mainly on faster modes (5 on $\mathbf{v}_3$) decay in $\sim$1~h.}
+\label{tab:state_summary}
+\end{table}
+
 
 \subsection{Markov transition matrix, eigenmodes, and regimes}
 
@@ -235,7 +276,14 @@ The second output of the model is a Markov transition matrix $\mathbf{T}$, whose
 \begin{equation}
 T_{ij} = \mathbb{P}\left( X_{t+\Delta t} = j \mid X_t = i \right)
 \end{equation}
-denote the probability of transitioning from state $i$ to state $j$. Although the data are sampled at a native temporal resolution of $\Delta t = 2\,\mathrm{min}$, transitions are evaluated at a coarser 10-min interval by considering a 5-step transition matrix. The resulting transition matrix is shown in Fig.~\ref{fig:markov_matrix}.
+denote the probability of transitioning from state $i$ to state $j$. The resulting transition matrix is shown in Fig.~\ref{fig:markov_matrix}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{fig7_markov_matrix.pdf}
+    \caption{\textbf{Markov state dynamics in latent space.} \textbf{(A)} Latent space visualization with the inferred Markov chain overlaid; example trajectories along the two dominant pathways are drawn on top (the corresponding time series are shown in Supplementary Information, Fig.~\ref{fig:trajectories}). The size of each state node is proportional to its asymptotic (stationary) probability, and arrows indicate transition probabilities between states. For clarity, transitions involving States~1 and~5 are omitted: both have negligible stationary occupancy ($\pi<5\%$) and very weak amplitudes in the leading eigenmode (Table~\ref{tab:state_summary}). \textbf{(B)} Transition matrix describing the dynamics of convection under a given shear. The dominance of the diagonal indicates strong state persistence, with the system remaining in a given state for extended periods. Analysis of the transition structure reveals preferred pathways, including oscillations among States~3--6--4 associated with weakly organized convection, and transitions between States~3 and~7 associated with strongly organized convection. The matrix further indicates that transitions from weakly to strongly organized convection preferentially occur via the intermediate State~2.}
+    \label{fig:markov_matrix}
+\end{figure}
 
 The matrix $\mathbf{T}$ is strongly diagonally dominated, indicating that the
 system tends to persist within a given state over several time steps.
@@ -248,19 +296,16 @@ Because $\mathbf{T}$ is stochastic, it admits a unit eigenvalue $\lambda_1=1$. T
 \begin{equation}
 \boldsymbol{\pi} =
 \begin{bmatrix}
-4.7\% & 4.9\% & 36.4\% & 18.0\% & 2.9\% & 20.2\% & 12.8\%
+4.6\% & 3.5\% & 36.4\% & 19.1\% & 4.0\% & 19.7\% & 12.7\%
 \end{bmatrix}.
 \label{eq:canon}
 \end{equation}
 
-The stationary distribution is dominated by Cluster~2 ($36.4\%$), followed by Clusters~5 ($20.2\%$),~3 ($18.0\%$), and~6 ($12.8\%$). Clusters~0 ($4.7\%$),~1 ($4.9\%$), and~4 ($2.9\%$ are rarely occupied.
+The stationary distribution is dominated by Cluster~3 ($36.4\%$), followed by Clusters~6 ($19.7\%$),~4 ($19.1\%$), and~7 ($12.7\%$). Clusters~1 ($4.6\%$),~2 ($3.5\%$), and~5 ($4.0\%$) are rarely occupied.
 
 We next examine the subdominant eigenvalues and eigenvectors of
 $\mathbf{T}$.
-All eigenvalues are real; no complex conjugate pairs are found, despite the
-expectation that oscillatory behavior might be present.
-This indicates that the dominant dynamics cannot be described as simple linear
-oscillations in state space.
+All non-stationary eigenvalues have imaginary parts at the level of numerical noise ($|\mathrm{Im}(\lambda_k)|<10^{-3}$); the spectrum is effectively real. This indicates that the dominant dynamics cannot be described as simple linear oscillations in state space.
 
 The leading nontrivial eigenvalue of the transition matrix is
 \begin{equation}
@@ -270,146 +315,85 @@ indicating a highly persistent dynamical mode. The corresponding eigenvector
 \begin{equation}
 \mathbf{v}_2 =
 \begin{bmatrix}
-2.1$\%$ & -12.6$\%$ & 55.5$\%$ & -47.6$\%$ & -2.5$\%$ & -44.7$\%$ & 49.8$\%$
+-0.11 & -0.19 & +0.30 & -0.49 & -0.02 & -0.44 & +0.65
 \end{bmatrix}
 \end{equation}
-describes deviations from the stationary distribution. Positive (negative) components of $\mathbf{v}_2$ indicate enhanced (suppressed) occupancy of the corresponding states relative to $\boldsymbol{\pi}$.
+(the unit-norm right eigenvector; its overall sign is arbitrary) describes deviations from the stationary distribution. Positive (negative) components of $\mathbf{v}_2$ indicate enhanced (suppressed) occupancy of the corresponding states relative to $\boldsymbol{\pi}$.
 
-This eigenmode separates the dynamics into two contrasting regimes. In the positive phase of the mode, Clusters~2 and~6 are preferentially occupied, while Clusters~3 and~5 are suppressed. In the negative phase, Clusters~3 and~5 are enhanced at the expense of Cluster~6, with the remaining clusters exhibiting comparatively weak variations (amplitudes $\leq 0.1$). These two regimes are also apparent directly in the structure of the transition matrix $\mathbf{T}$.
+This eigenmode separates the dynamics into two contrasting regimes. In its positive phase, Clusters~3 and~7 are preferentially occupied while Clusters~4 and~6 are suppressed. In the negative phase the pattern reverses: Clusters~4 and~6 are enhanced at the expense of Clusters~3 and~7. Clusters~1 and~2 carry smaller but non-negligible negative amplitudes ($\approx -0.11$ and $-0.19$), aligning weakly with the negative-phase regime, while Cluster~5 carries essentially no signal in this mode ($|\mathrm{amplitude}|<0.05$). These two regimes are also apparent directly in the structure of the transition matrix $\mathbf{T}$.
 
-Physically, these two regimes correspond to distinct modes of convective evolution.
-The first regime represents a directly organized convective system, while the
-second regime describes a trajectory that passes through unorganized,
-popcorn-like convection before dissipating.
-Time series of individual realizations confirm that system trajectories cluster along these two pathways, consistent with the structures inferred from the transition matrix and its leading eigenmodes.
+Physically, the two phases of $\mathbf{v}_2$ correspond to distinct modes of convective evolution.
+The positive phase (Clusters~3 and~7 enhanced) represents a directly organized pathway, in which
+suppressed conditions transition into sustained deep convection. The negative phase (Clusters~4 and~6
+enhanced) describes the alternative route, in which convection passes through intense
+precipitation-driven and unorganized, popcorn-like phases before dissipating.
+Time series of individual realizations (Supplementary Information, Fig.~\ref{fig:trajectories}) confirm that system trajectories cluster along these two pathways, consistent with the structures inferred from the transition matrix and its leading eigenmodes.
 
-We next assess whether the clustered dynamics are approximately Markovian, and thus whether the transition matrix alone captures the dominant regime evolution. Potential deviations may arise from slow processes, such as moisture memory, not represented in the state partition.
+The eigenvalue spectrum just identified makes a quantitative prediction: for a true Markov chain, the autocorrelation of every state's occupancy must be a sum of exponentials with the decay times $\tau_k = -\Delta t / \log|\lambda_k|$. In the next subsection we test this prediction directly against the empirical autocorrelations, identifying which states deviate from Markovian behavior and how those deviations reveal internal feedbacks such as cold-pool memory.
 
 
-\begin{figure}
-    \centering
-    \includegraphics[width=\textwidth]{markov_matrix.pdf}
-    \caption{\textbf{Markov state dynamics in latent space.} \textbf{(A)} Latent space visualization with the inferred Markov chain overlaid. The size of each state node is proportional to its asymptotic (stationary) probability, and arrows indicate transition probabilities between states. For clarity, transitions involving States~0 and~4 are omitted, as they play a limited role in the identified convective regimes. \textbf{(B)} Transition matrix describing the dynamics of convection under a given shear. The dominance of the diagonal indicates strong state persistence, with the system remaining in a given state for extended periods. Analysis of the transition structure reveals preferred pathways, including oscillations among States~2--5--3 associated with weakly organized convection, and transitions between States~2 and~6 associated with strongly organized convection. The matrix further indicates that transitions from weakly to strongly organized convection preferentially occur via the intermediate State~1.}
-    \label{fig:markov_matrix}
-\end{figure}
+\subsection{Markovianity assessment and internal feedbacks}\label{sec:markov}
 
-\subsection{Markovianity assessment and internal feedbacks}
+We finally test whether the seven-state chain provides a self-contained description of convective evolution, by asking whether the state at time $t$ alone is sufficient to predict the state at $t+\tau$. Deviations from this Markov property would indicate slow internal processes---moisture memory, cold pools, mesoscale organization---that the partition does not resolve. The question is long-standing: classical convective parameterizations assume instantaneous quasi-equilibrium adjustment \citep{zhang2003convective, bechtold2014representing}, while more recent schemes introduce explicit memory variables to capture lagged responses \citep{piriou2007approach, gerard2009cloud, mapes2011parameterizing, hwong2023assessing}.
 
-We finally assess the extent to which the inferred state dynamics can be approximated as Markovian, and thus whether the chosen state partitioning provides a self-contained description of the system’s temporal evolution.
-Under the Markov hypothesis, the state at time $t$ contains all the information required to predict the state at time $t+1$, implying that memory of earlier states does not contribute to the near-future dynamics. Deviations from this assumption would indicate the presence of unresolved internal feedbacks or slow processes—such as moisture memory or large-scale environmental modulation—that are not explicitly captured by the clustering.
-
-A standard approach to test Markovianity is through the analysis of temporal autocorrelations. For a Markov process, correlations between the present state and states at increasing time lags are expected to decay exponentially, reflecting the progressive loss of information about past configurations.
-
-\paragraph{State indicator autocorrelation.}
-We introduce the indicator function associated with state $i$,
-\begin{equation}
-I_i(t) = \mathbf{1}[X_t = i],
-\end{equation}
-and define the normalized autocorrelation function
+\paragraph{Indicator autocorrelation.}
+Defining the occupancy indicator $I_i(t) = \mathbf{1}[X_t = i]$ and its normalized autocorrelation
 \begin{equation}
 C_i(\tau) =
-\frac{
-\mathbb{E}\left[(I_i(t)-\pi_i)(I_i(t+\tau)-\pi_i)\right]
-}{
-\mathbb{E}\left[(I_i(t)-\pi_i)^2\right]
-},
+\frac{\mathbb{E}\!\left[(I_i(t)-\pi_i)(I_i(t+\tau)-\pi_i)\right]}
+     {\mathbb{E}\!\left[(I_i(t)-\pi_i)^2\right]},
 \end{equation}
-where $\mathbb{E}[\cdot]$ is the expectation, $\pi_i$ is the stationary probability of state $i$ (see \ref{eq:canon}), noting that $\mathbb{E}[I_i(t)] = \pi_i$ under stationarity.
-
-This quantity measures how strongly the occupancy of state $i$ at time $t$ influences the probability of occupying the same state at a later time $t+\tau$.
-
-\paragraph{Expected behavior for a Markov chain.}
-Assume that ${X_t}$ is a discrete-time Markov chain with transition matrix $\mathbf{T}$ and stationary distribution $\boldsymbol{\pi}$. Under stationarity,
+a discrete-time Markov chain with transition matrix $\mathbf{T}$ and stationary distribution $\boldsymbol{\pi}$ admits the closed form
 \begin{equation}
-\mathbb{P}(X_t=i, X_{t+\tau}=i)
-= \pi_i T^\tau_{ii},
+C_i(\tau) \;=\; \frac{T^\tau_{ii} - \pi_i}{1-\pi_i}
+\;=\; \sum_{\alpha=2}^K A_\alpha^{(i)}\, \lambda_\alpha^\tau,
+\label{eq:autocor}
 \end{equation}
-and $\mathbb{E}[I_i(t)] = \mathbb{E}[I_i(t+\tau)] = \pi_i$. It follows that
+a superposition of exponentially decaying modes set by the eigenvalues $\lambda_\alpha$ of $\mathbf{T}$, with state-dependent amplitudes $A_\alpha^{(i)} = (\mathbf{v}_\alpha)_i (\mathbf{w}_\alpha)_i / (1-\pi_i)$, where $\mathbf{v}_\alpha$ and $\mathbf{w}_\alpha$ are the right and left eigenvectors of $\mathbf{T}$ (derivation in SI). Departures from this prediction quantify residual memory not encoded by the partition.
+
+\paragraph{Memory beyond Markov in the convection-active states.}
+Most states' empirical autocorrelations track Eq.~\ref{eq:autocor} (Fig.~\ref{fig:autocorrelation}a). States~6 and~7 decay measurably more slowly than their own Markov prediction. This distinction matters: a state can be \emph{sustained} (long dwell times) and still \emph{Markovian} if its diagonal $T_{ii}$ alone explains the persistence; States~6 and~7 are sustained \emph{beyond} what $T_{ii}$ predicts, indicating that an internal degree of freedom not represented in the partition is keeping them alive.
+
+\paragraph{Cold pools partly close the gap.}
+Cold pools are a natural candidate carrier of this missing memory \citep{tompkins2001coldpools, houze1977structure, rotunno1988theory}. The hypothesis is testable: if cold pools carry the memory, then knowing the cold-pool field at the starting time should make the subsequent State-7 dynamics more Markovian---faster autocorrelation decay, closer to the Markov prediction. To test this we introduce an indicator that picks out State-7 timesteps with a high cold pool,
 \begin{equation}
-C_i(\tau)
-= \frac{T^\tau_{ii} - \pi_i}{1-\pi_i}.
+J_7^\star(t) \;=\; \mathbf{1}\!\left[X_t = 7 \,\text{ and }\, \mathrm{CP}(t) > \mathrm{CP}_\star\right],
 \end{equation}
-
-To analyze the temporal structure of $C_i(\tau)$, we use the spectral decomposition of the transition matrix. Denoting the eigenvalues of $\mathbf{T}$ by $(1,\lambda_2,\dots,\lambda_K)$, the leading eigenvalue $\lambda_1=1$ corresponds to the stationary distribution, while all other eigenvalues satisfy $|\lambda_\alpha|<1$ for $\alpha\ge 2$. Raising $\mathbf{T}$ to the power $\tau$ yields
+where $\mathrm{CP}_\star$ is the 75th percentile of the domain-integrated cold-pool intensity. The cold-pool-conditioned State-7 survival is then the expected State-7 occupancy a lag $\tau$ later, averaged over the timesteps selected by $J_7^\star$:
 \begin{equation}
-T^\tau
-= \mathbf{1}\boldsymbol{\pi}^\top
-+ \sum_{\alpha=2}^K \lambda_\alpha^\tau  v_\alpha w_\alpha^\top,
+S^{(\mathrm{CP})}_7(\tau) \;=\; \mathbb{E}\!\left[\,I_7(t+\tau) \,\big|\, J_7^\star(t) = 1\,\right].
 \end{equation}
-where $\mathbf{v}_\alpha$ and $\mathbf{w}_\alpha$ denote the right and left eigenvectors of $\mathbf{T}$ associated with the eigenvalue $\lambda_\alpha$, respectively, normalized such that $\mathbf{w}_\alpha^\top \mathbf{v}_\beta = \delta_{\alpha\beta}$. In particular $w_1=\pi$ and $v_1=(1, 1, .., 1)$.
+We then rescale to autocorrelation form via $C^{(\mathrm{CP})}_7(\tau) = (S^{(\mathrm{CP})}_7(\tau) - \pi_7)/(1-\pi_7)$ so that the result can be plotted on the same axis as panel~(a). The cold-pool condition is enforced \emph{only at the starting time}; after $t$, the trajectory is free to wander in $\mathrm{CP}$. Enforcing $J_7^\star = 1$ throughout the lag window would mechanically truncate the survival whenever $\mathrm{CP}$ dropped below $\mathrm{CP}_\star$---an artifact of the conditioning, not of the dynamics (SI compares the two formulations). The conditioned curve (Fig.~\ref{fig:autocorrelation}b, dashed) sits between the unconditional empirical curve (solid) and the Markov reference (dotted), closing roughly $20$--$30\%$ of the gap at lags of $100$--$200$~min. Knowing the cold-pool field at the starting time therefore makes the subsequent State-7 dynamics more Markovian---but not fully Markovian.
 
-Substituting into the expression for $C_i(\tau)$, the stationary contribution cancels exactly, leading to
-\begin{equation}
-C_i(\tau)
-= \sum_{\alpha=2}^K A_\alpha^{(i)} \lambda_\alpha^\tau ,
-\label{eq:autocor} 
-\end{equation}
-where $A_\alpha^{(i)}
-=
-\left(\mathbf{e}_i^\top \mathbf{v}_\alpha\right)
-\left(\mathbf{w}_\alpha^\top \mathbf{e}_i\right)
-/
-(1 - \pi_i)
-$
-
-Thus, for a Markovian system, the state autocorrelation function is a superposition of exponentially decaying modes. At sufficiently large time lags, the decay is dominated by the second-largest eigenvalue,
-\begin{equation}
-C_i(\tau) \sim \lambda_2^\tau
-= \exp\left(-\tau / \tau_{\mathrm{corr}}\right),
-\end{equation}
-with correlation time $\tau_{\mathrm{corr}} = -1/\ln|\lambda_2|$. The step by step proof can be found in the supplementary.
-
-Exponential decay of state autocorrelations therefore provides a direct and quantitative test of the Markov assumption. Systematic departures from this behavior indicate residual memory effects and suggest that the chosen partition does not fully isolate the relevant dynamical degrees of freedom.
-
-\paragraph{Diagnosis of memory effects.}
-Departures from exponential decay indicate either genuinely non-Markovian dynamics or an incomplete state representation in which slow variables have been omitted.
-We therefore compute the indicator autocorrelation $C_i(\tau)$ for each state and compare it to the theoretical Markovian prediction derived from the estimated transition matrix.
-
-Figure~\ref{fig:autocorrelation} shows the empirical autocorrelations (solid lines) together with the Markovian expectation from \ref{eq:autocor} (dashed lines). 
-Most states exhibit a rapid decay consistent with Markovian dynamics. 
-However, states corresponding to shallow convection (state~0), popcorn convection (state~5), and organized deep convection (state~6) display significantly slower decay, indicating the presence of memory effects.
-
-\paragraph{Role of internal feedbacks.}
-We interpret the observed deviations from Markovian behavior as signatures of internal feedback processes that are not resolved by the discrete state partition. In particular, for state~6, we hypothesize that variability in cold pool activity introduces an additional, slowly evolving internal degree of freedom.
-
-To test this hypothesis, we refine the analysis by conditioning state~6 on a cold pool activity index. This index is constructed by tracking cold pools in time using sea surface temperature anomalies and defining the cold pool activity at each time step as the mean detected cold pool size weighted by its intensity (see Supplementary Information for details).
-
-We then compute state autocorrelations separately for occurrences of state~6 associated with strong and weak cold pool activity. When conditioned in this manner, the autocorrelations decay rapidly and closely follow the Markovian prediction.
-
-This result indicates that the apparent non-Markovian behavior of state~6 originates from unresolved internal feedback variability rather than a breakdown of the Markov framework itself. Incorporating cold pool activity into the state description therefore provides a physically motivated pathway toward a more Markovian representation of the convective dynamics.
+\paragraph{Cold pools are part---but not all---of the hidden memory.}
+The unclosed portion of the gap implicates other slow internal variables: mesoscale moisture pooling \citep{mapes2011parameterizing}, cloud-cluster geometry \citep{hwong2023assessing}, and free-tropospheric humidity all evolve on the relevant time scales. Two caveats apply: $\mathrm{CP}(t)$ collapses spatial structure into a scalar, and stratifying by $\mathrm{CP}(t)$ inherits some lifecycle-stage dependence; SI sensitivity tests (per-cold-pool diagnostic and entry-conditional survival anchored at State-7 entries) are consistent with the closure reported here. A definitive identification of the dominant carrier would require re-training the encoder with explicit cold-pool inputs, which we leave to future work. 
 
 \begin{figure}
     \centering
-    \includegraphics[width=\textwidth]{markovianity_and_coldpools.pdf}
-    \caption{(A) State autocorrelation functions (colors) compared with the Markovian prediction from the inferred transition matrix (dashed). Most states exhibit rapid, near-exponential decay, while States~0,~5, and~6 show slower decay and systematic deviations, indicating departures from Markovianity.
-(B) Autocorrelation of State~6. Conditioning on cold pool activity (below/above median) yields decay rates consistent with the Markovian prediction, indicating that the apparent non-Markovian behavior arises from unresolved internal variability.
-}
+    \includegraphics[width=\textwidth]{fig9bis_markovianity_coldpools.pdf}
+    \caption{\textbf{(a)} Per-state indicator autocorrelations (solid) compared with the Markov prediction for the same state (dashed, same colour). For most states the empirical curve tracks the prediction closely, indicating that the seven-state Markov chain captures their dynamics well. States~6 and~7 decay noticeably more slowly than their own Markov prediction, retaining residual memory not encoded by the seven discrete states alone.
+    \textbf{(b)} Cold-pool conditioning recovers part of the State-7 memory. Three curves on the same autocorrelation axis as panel~(a):
+    (i)~\emph{solid red} is the empirical State-7 autocorrelation (same as in panel~(a));
+    (ii)~\emph{dotted black} is the State-7 Markov prediction---what the autocorrelation \emph{would} look like if the seven-state chain were fully Markovian (identical to the red dashed curve of panel~(a));
+    (iii)~\emph{dashed red} is the same State-7 autocorrelation, but now restricted to starting times at which the cold-pool intensity $\mathrm{CP}(t)$ exceeds its 75th-percentile threshold $\mathrm{CP}_\star$ (the cold-pool condition is applied only at the starting time; the trajectory is free thereafter).
+    The dashed red curve sits between the solid red and the dotted black---knowing the cold-pool field at the starting time shifts the dynamics closer to Markov, revealing part of the hidden memory, but does not close the gap entirely.}
     \label{fig:autocorrelation}
 \end{figure}
 
 
-\section{Conclusion}
-This work introduces a stochastic, data-driven framework to characterize convective organization through the vertical structure of the isentropic mass flux. Using idealized high-resolution simulations under fixed large-scale forcing and prescribed vertical wind shear, we show that convective mass-flux variability evolves on a low-dimensional manifold and can be compactly represented within an eight-dimensional latent space. This reduced representation provides a dynamically meaningful description of convective variability while retaining the essential structure of vertical transport.\\
+\section{Conclusion and perspective}\label{sec:conclusion}\label{sec:discussion}
+We developed a data-driven framework that treats convective organization dynamically: an encoder maps isentropic mass-flux profiles into a low-dimensional latent space, the latent space is partitioned into discrete convective states, and transitions between states are modelled as a Markov chain. Applied to cloud-resolving squall-line simulations under fixed vertical wind shear, this construction addressed three questions: \emph{(i)} what mass-flux states a given forcing makes accessible; \emph{(ii)} whether transitions between them can be approximated by a Markov chain, and how organized and weakly organized pathways differ; \emph{(iii)} where internal feedbacks introduce effective memory beyond the discrete state.
+
+Convective variability lives on a low-dimensional manifold captured by eight latent dimensions and seven discrete states that recover the canonical phases of the convective life cycle. The chain reveals two competing routes through this state space: a direct ascent into sustained deep convection, and a longer drift through weakly organized phases. States~6 and~7 retain residual memory beyond their Markov prediction. Conditioning on cold-pool intensity at the starting time closes $20$--$30\%$ of this gap at lags of $100$--$200$~min.
+
+The framework's distinctive capability is that departures from Markovianity \emph{diagnose} what the discrete partition is missing, identifying the slow internal variables that a closed dynamical description of convection must include.
+
+Within a given forcing, the Markovianity diagnostic can be sharpened by conditioning on richer descriptors of internal state than the domain-integrated cold-pool intensity used here. Because the isentropic mass-flux decomposition retains the downdraft branch of the flow, the representation already exposes the slower time scale on which evaporative downdrafts---and the cold pools they generate---develop relative to the convective updraft; conditioning explicitly on cold-pool age, gust-front strength, and other lifecycle markers would target this development lag directly. Per-cold-pool quantities capture the spatial structure that a scalar index averages out and could be aggregated by cold-pool shape, alignment, or proximity to neighbours; mesoscale moisture pooling, free-tropospheric humidity, and cluster-geometry measures each isolate a further candidate slow variable that the latent state does not currently resolve. Each addition that further closes the empirical-versus-Markov gap identifies another slow variable a memory-aware parameterization must track; the full attribution of the residual State-7 memory is the most direct extension of the present work.
 
 
-Within this latent space, convective dynamics organize into a small number of states associated with distinct phases of the convective life cycle: initiation or rest, intermittent convection, organized convection, and dissipation. The leading directions of variability capture both the temporal evolution of convection and its degree of organization, while intermediate regions correspond to transition pathways between these states. This new representation offers a process-oriented view of convection that moves beyond horizontal cloud-type classifications.\\
+The simulations analysed here span a single shear configuration. The most immediate extension is to repeat the construction across forcing regimes---weak shear (popcorn convection), moderate shear (mixed regimes), strong shear (squall lines)---and compare the resulting transition matrices. The expected shifts are concrete and dynamically interpretable: under stronger shear, the diagonal probabilities $T_{ii}$ of the organized states should increase, the direct pathway from initiation into organized deep convection should dominate over the indirect route through weakly organized phases, and the corresponding eigenmodal time scales should lengthen. Mapping the transition matrix as a function of forcing therefore turns the organization itself into a measurable dynamical observable.
 
 
-We further demonstrate that convective evolution in this reduced space can be described as a stochastic process governed by a Markov transition matrix. This probabilistic description reveals preferred regimes, canonical distributions, and characteristic time scales, and distinguishes organized from unorganized modes of convection. Autocorrelation analysis shows that organized convective states exhibit memory effects, indicating departures from strict Markovian behavior. Conditioning the state space on an external cold-pool index improves Markovianity, highlighting the role of internal feedbacks in shaping convective pathways and emphasizing the importance of incorporating such processes into stochastic representations of convection.
-
-
-\section{Discussion}
-\paragraph{Internal feedbacks and state construction.}
-
-The results highlight the central role of internal convective feedbacks in governing state-to-state evolution. Processes such as cold-pool dynamics, entrainment, and mesoscale circulations introduce memory and nonlocal interactions that are not fully captured by purely Markovian state descriptions. Although isentropic coordinates are expected to capture cold-pool anomalies, their signature is not clearly isolated here, potentially reflecting limited signal strength or sensitivity to the binning of moist static energy. Overall, the results suggest that while external forcing constrains the accessible state space, internal feedbacks regulate the trajectories within it, underscoring the importance of embedding such feedbacks directly in stochastic state definitions.\\
-
-
-\paragraph{Influence of external forcing on latent structure and transitions.}
-An important open question concerns how external forcing shapes the geometry of the latent space and the associated transition dynamics. Changes in environmental parameters such as vertical wind shear are expected to modify both the accessible convective states and the probabilities of transitions between them. Comparing latent spaces and transition matrices across different forcing regimes offers a systematic framework for assessing forcing dependence and for identifying common structures that persist across environments. 
-
-
-\paragraph{The dynamical nature of convective organization.}
-A key strength of the proposed framework is that convective organization is characterized dynamically, as trajectories through a reduced state space, rather than solely through static or time-averaged diagnostics. In this view, organized convection is defined not only by the states it occupies, but by the sequences of transitions through which it emerges, persists, and decays. This trajectory-based perspective enables direct comparison of convective systems with similar bulk properties but distinct temporal evolutions, and provides a dynamical foundation for studying convective organization as an evolving process rather than a static outcome. Taken together, these results suggest that diversity emerges from the range of trajectories promoted by large-scale forcing, rather than from the presence of distinct states alone.
 
 \section{Data and Code Availability}
 
@@ -419,7 +403,7 @@ All code used in this study is openly available at: \url{https://github.com/soso
 
 \section{Acknowledgments}
 
-The authors thank Sara Shamekh for helpful feedback on this work. We are grateful to Juan Nathanael and Carla Roesch for discussions on Koopman operators, and to Fabrizio Falasca and Matthieu Blanke for recommendations on the dynamical systems literature. We also thank Zhe Feng, Xingchao Chen, Ruby Leung, and the WACCEM project team for valuable discussions throughout the course of this study.
+We are grateful to Juan Nathanael and Carla Roesch for discussions on Koopman operators, and to Fabrizio Falasca and Matthieu Blanke for recommendations on the dynamical systems literature. We also thank Sara Shamekh, Zhe Feng, Xingchao Chen, Ruby Leung, and the WACCEM project team for valuable discussions throughout the course of this study. We are grateful to Koichi Sakaguchi and Huancui Hu for their time in reviewing the paper and for providing very interesting and constructive feedback.
 
 Portions of the manuscript were rephrased with the assistance of ChatGPT (OpenAI) for language editing, and Claude (Anthropic) assisted with aspects of code development and cleaning. These tools were used solely to improve clarity and software organization; all scientific ideas, analysis, and conclusions were developed by the authors.
 

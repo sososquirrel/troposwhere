@@ -1,0 +1,53 @@
+\documentclass[11pt]{article}
+\usepackage[top=1.8cm,bottom=1.8cm,left=2.4cm,right=2.4cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,allcolors=blue!45!black]{hyperref}
+\pagestyle{empty}
+
+\begin{document}
+
+\noindent\today
+
+\bigskip
+\noindent To the Editors of \emph{Physical Review Letters},
+
+\medskip
+\noindent We are pleased to submit our manuscript, \textbf{``A temporally-constrained latent space reveals the stochastic dynamics of convective organization,''} by Sophie Abramian, Olivier Pauluis, and Pierre Gentine, for consideration as a Letter.
+
+Many systems are both high-dimensional and stochastic, meaning that the same conditions can lead to different trajectories. A central goal is to reduce their dimension in order to better understand the underlying dynamics. In our study, we look for a reduction chosen on purpose to \emph{simplify} the dynamics.
+
+We introduce a framework that learns the reduction and the dynamics jointly: an encoder maps the system into a low-dimensional latent space, the latent space is partitioned into a discrete set of states, and transitions between states are modelled as a Markov chain. It builds on data-driven Koopman methods (Brunton and colleagues), which learn a latent space in which the dynamics become linear, and extends them from deterministic to \emph{stochastic} evolution. The resulting description is compact, interpretable, and general---it applies to any complex system, from turbulence to neural activity.
+
+We demonstrate it on a hard and important problem: the organization of atmospheric deep convection, one of the largest uncertainties in climate projections. We study it in a controlled, idealized setting---simulations of tropical squall lines under a fixed environment---so that the variability we model is \emph{internal} to the convection itself. With no supervision, the method recovers five physically meaningful convective states and a Markov chain that alternates between organized and disorganized periods. We also assess how well the Markov description holds, and find that \emph{where it breaks down, it points to a hidden variable the model is missing}. This leads us to cold pools---masses of cold air beneath storms---which we identify as a measurable source of that memory, accounting for about a third of the gap.
+
+We believe the work fits \emph{PRL} for three reasons. First, it offers a general, data-driven way to discover the states of a complex system and model the transitions between them---of broad interest across physics. Second, the same Markov description doubles as a discovery tool: where the transitions stop being memoryless, they reveal a hidden variable the model is missing. Third, the problem it tackles, the internal variability of convection, matters for climate.
+
+The manuscript has not been published and is not under consideration elsewhere; all authors have approved this submission.
+
+\medskip
+{\sloppy
+\noindent\textbf{Suggested reviewers:}
+Zhiming Kuang, Harvard University (kuang@fas.harvard.edu);
+Allison Wing, Florida State University (awing@fsu.edu);
+Cathy Hohenegger, MPI for Meteorology (cathy.hohenegger@mpimet.mpg.de);
+Brian Mapes, University of Miami (bmapes@miami.edu);
+Elizabeth Barnes, Colorado State University (eabarnes@colostate.edu).\par}
+
+\medskip
+\noindent Thank you for considering our manuscript.
+
+\medskip
+\noindent Sincerely,\\[1mm]
+\noindent\includegraphics[width=3.6cm]{signature.png}\\[-0.5mm]
+{\small
+Sophie Abramian, on behalf of the authors\\
+Department of Earth and Environmental Engineering, Columbia University\\
+\href{mailto:sophie.abramian@gmail.com}{sophie.abramian@gmail.com}
+}
+
+\end{document}
