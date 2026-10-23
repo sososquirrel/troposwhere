@@ -101,10 +101,19 @@ def state_label(s):
     return str(int(s) + STATE_DISPLAY_OFFSET)
 
 
-def panel_label(ax, label, x=0.02, y=0.97, fontsize=14):
-    """Add a bold panel label (a, b, c, ...) in the top-left of a subplot."""
-    ax.text(x, y, label, transform=ax.transAxes,
-            fontsize=fontsize, fontweight='bold', va='top', ha='left')
+def panel_label(ax, label, x=0.02, y=0.97, fontsize=14, top=False):
+    """Add a bold panel label (a, b, c, ...) to a subplot.
+
+    By default the label sits in the top-left inside the axes. With
+    ``top=True`` it is placed just above the axes frame (top-left), which
+    reads as a panel header on top of the figure.
+    """
+    if top:
+        ax.text(-0.01, 1.03, label, transform=ax.transAxes,
+                fontsize=fontsize, fontweight='bold', va='bottom', ha='left')
+    else:
+        ax.text(x, y, label, transform=ax.transAxes,
+                fontsize=fontsize, fontweight='bold', va='top', ha='left')
 
 
 # ============================================================

@@ -1,9 +1,10 @@
 \documentclass[11pt]{article}
-\usepackage[top=1.8cm,bottom=1.8cm,left=2.4cm,right=2.4cm]{geometry}
+\usepackage[top=1.6cm,bottom=1.4cm,left=2.5cm,right=2.5cm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{microtype}
 \usepackage{parskip}
+\setlength{\parskip}{0.65em}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage[colorlinks=true,allcolors=blue!45!black]{hyperref}
@@ -13,37 +14,37 @@
 
 \noindent\today
 
-\bigskip
+\medskip
 \noindent To the Editors of \emph{Physical Review Letters},
 
 \medskip
-\noindent We are pleased to submit our manuscript, \textbf{``A temporally-constrained latent space reveals the stochastic dynamics of convective organization,''} by Sophie Abramian, Olivier Pauluis, and Pierre Gentine, for consideration as a Letter.
+\noindent We are pleased to submit our manuscript, \textbf{``A temporally-constrained latent space reveals the stochastic dynamics of convective organization,''} by Sophie Abramian, Olivier Pauluis, L. Ruby Leung, and Pierre Gentine, for consideration as a Letter.
 
-Many systems are both high-dimensional and stochastic, meaning that the same conditions can lead to different trajectories. A central goal is to reduce their dimension in order to better understand the underlying dynamics. In our study, we look for a reduction chosen on purpose to \emph{simplify} the dynamics.
+Many systems are high-dimensional and stochastic: identical initial conditions can lead to very different trajectories, in a state space too large to represent directly. How can such systems be reduced to a few variables without losing the dynamics that generate this diversity? We introduce a dimensionality-reduction principle in which the latent representation is constrained to be Markovian. Unlike conventional latent spaces, which preserve geometry, ours preserves the stochastic dynamics themselves: the few retained variables are sufficient to predict their own evolution. %In practice, we train a variational autoencoder coupled with a learned Markov process, building on data-driven Koopman methods and extending them from deterministic to \emph{stochastic} dynamics.
 
-We introduce a framework that learns the reduction and the dynamics jointly: an encoder maps the system into a low-dimensional latent space, the latent space is partitioned into a discrete set of states, and transitions between states are modelled as a Markov chain. It builds on data-driven Koopman methods (Brunton and colleagues), which learn a latent space in which the dynamics become linear, and extends them from deterministic to \emph{stochastic} evolution. The resulting description is compact, interpretable, and general---it applies to any complex system, from turbulence to neural activity.
+We apply this to atmospheric deep convection, where understanding the origin of intrinsic variability remains a long-standing open problem and a major source of uncertainty in climate projections. We perform cloud-resolving simulations of squall lines (intense, organized storm systems), which exhibit widely different evolutions despite identical large-scale forcing. The method identifies five interpretable states and the Markov transition matrix connecting them. A spectral analysis of this matrix reduces the life cycle of convection to a nearly memoryless walk governed by a single slow mode, from which two competing routes emerge out of a shared suppressed background: a direct ascent into deep organized convection, and a slower drift through weakly organized phases.
 
-We demonstrate it on a hard and important problem: the organization of atmospheric deep convection, one of the largest uncertainties in climate projections. We study it in a controlled, idealized setting---simulations of tropical squall lines under a fixed environment---so that the variability we model is \emph{internal} to the convection itself. With no supervision, the method recovers five physically meaningful convective states and a Markov chain that alternates between organized and disorganized periods. We also assess how well the Markov description holds, and find that \emph{where it breaks down, it points to a hidden variable the model is missing}. This leads us to cold pools---masses of cold air beneath storms---which we identify as a measurable source of that memory, accounting for about a third of the gap.
+A Markovianity assessment shows the description to be nearly, but not exactly, memoryless, and the small departure is itself informative: it indicates what the five states omit. We trace part of this residual memory to cold pools, the cold air left beneath storms. The internal variability of convection is therefore not noise, but a low-dimensional stochastic process between a few physical states, with the residual memory carried by an identifiable physical process.
 
-We believe the work fits \emph{PRL} for three reasons. First, it offers a general, data-driven way to discover the states of a complex system and model the transitions between them---of broad interest across physics. Second, the same Markov description doubles as a discovery tool: where the transitions stop being memoryless, they reveal a hidden variable the model is missing. Third, the problem it tackles, the internal variability of convection, matters for climate.
+The principle is general: a reduction constrained by time gives access to the internal variability of a system, the diversity of outcomes it can produce under fixed external conditions, rather than to its mean behaviour alone. We believe the work is well suited to \emph{PRL}.
 
-The manuscript has not been published and is not under consideration elsewhere; all authors have approved this submission.
+The manuscript is not published or under consideration elsewhere, and all authors approve this submission.
 
-\medskip
+\smallskip
 {\sloppy
 \noindent\textbf{Suggested reviewers:}
+Elizabeth Barnes, Colorado State University (eabarnes@colostate.edu);
 Zhiming Kuang, Harvard University (kuang@fas.harvard.edu);
 Allison Wing, Florida State University (awing@fsu.edu);
 Cathy Hohenegger, MPI for Meteorology (cathy.hohenegger@mpimet.mpg.de);
-Brian Mapes, University of Miami (bmapes@miami.edu);
-Elizabeth Barnes, Colorado State University (eabarnes@colostate.edu).\par}
+Brian Mapes, University of Miami (bmapes@miami.edu).\par}
 
-\medskip
+\smallskip
 \noindent Thank you for considering our manuscript.
 
-\medskip
+\smallskip
 \noindent Sincerely,\\[1mm]
-\noindent\includegraphics[width=3.6cm]{signature.png}\\[-0.5mm]
+\noindent\includegraphics[width=3.2cm]{signature.png}\\[-0.5mm]
 {\small
 Sophie Abramian, on behalf of the authors\\
 Department of Earth and Environmental Engineering, Columbia University\\

@@ -374,7 +374,7 @@ def generate_fig_pca_panels():
         ax.set_xlabel(xlbl)
         ax.grid(True, linestyle="--", alpha=0.35)
     axes[0].set_ylabel(ylbl)
-    for ax, lbl in zip(axes, ("a", "b", "c")):
+    for ax, lbl in zip(axes, ("a.", "b.", "c.")):
         wfp.panel_label(ax, lbl)
 
     out_path = os.path.join(FIGURES_OUT, "fig_pca_panels.pdf")
@@ -540,20 +540,12 @@ def generate_fig7_markov_matrix():
         ylabel=f"PCA 2  (organization, {100*evr[1]:.0f}%)",
     )
     ax_pca.grid(True, linestyle="--", alpha=0.35)
-    wfp.panel_label(ax_pca, "a")
+    wfp.panel_label(ax_pca, "a.", top=True)
 
     bary = np.array([
         emb_pca[states == s].mean(axis=0) if (states == s).any() else np.zeros(2)
         for s in range(NUM_STATES)
     ])
-
-    for ((t0, t1), col, style) in zip(INTERVALS, TRAJ_COLORS, TRAJ_STYLES):
-        traj = wfp.smooth_traj(emb_pca[t0:t1], win=TRAJ_SMOOTH_WIN)
-        if len(traj) == 0:
-            continue
-        ax_pca.plot(traj[:, 0], traj[:, 1], color=col, linestyle=style,
-                    lw=2.4, zorder=20,
-                    path_effects=[pe.withStroke(linewidth=4.5, foreground="white")])
 
     cbar_pca = fig.colorbar(sc, cax=cax_pca, orientation="horizontal", aspect=60, shrink=0.8)
     cbar_pca.set_label("Cluster state")
@@ -568,86 +560,13 @@ def generate_fig7_markov_matrix():
     ax_mat.set_yticks(np.arange(NUM_STATES))
     ax_mat.set_xticklabels([wfp.state_label(i) for i in range(NUM_STATES)])
     ax_mat.set_yticklabels([wfp.state_label(i) for i in range(NUM_STATES)])
-    wfp.panel_label(ax_mat, "b")
+    wfp.panel_label(ax_mat, "b.", top=True)
     for i in range(Tmat.shape[0]):
         for j in range(Tmat.shape[1]):
             ax_mat.text(j, i, f"{Tmat[i, j]:.2f}",
                         ha="center", va="center", fontsize=9,
                         color="white" if Tmat[i, j] > 0.5 * Tmat.max() else "black")
     fig.colorbar(im, cax=cax_mat, orientation="horizontal", aspect=60, shrink=0.8).set_label("P(i → j)")
-
-    # Chain edges with probability labels. Each curved Bezier connects
-    # barycenter i -> j; line width and arrowhead encode P(i->j); a small
-    # numeric badge sits next to the curve so it does not interrupt the
-    # arrow flow (critical for reading the 4<->5 oscillation).
-    LW_MIN, LW_MAX = 1.5, 8.0
-    for i in range(NUM_STATES):
-        for j in range(NUM_STATES):
-            if i == j:
-                continue
-            p_ij = float(Tmat[i, j])
-            if p_ij < EDGE_PROB_THRESHOLD:
-                continue
-            p0 = bary[i]
-            p1 = bary[j]
-            d_vec = p1 - p0
-            dist = np.linalg.norm(d_vec)
-            if dist < 1e-9:
-                continue
-            perp = np.array([-d_vec[1], d_vec[0]]) / dist
-            rad = 0.22  # slightly more bowed so reciprocal pairs separate
-            ctrl = (p0 + p1) / 2 + rad * dist * perp
-            t_samples = np.linspace(0.0, 1.0, 80)[:, None]
-            curve = ((1 - t_samples) ** 2 * p0
-                     + 2 * (1 - t_samples) * t_samples * ctrl
-                     + t_samples ** 2 * p1)
-            # Trim curve so it lives in the space between the two bubbles.
-            # Bubble radius scales with pi; pick a conservative shrink distance
-            # that clears the largest bubble (C3).
-            trim_source = 0.20 + 1.2 * np.sqrt(pi[i])
-            trim_target = 0.20 + 1.2 * np.sqrt(pi[j])
-            d_from_p0 = np.linalg.norm(curve - p0, axis=1)
-            d_from_p1 = np.linalg.norm(curve - p1, axis=1)
-            keep = (d_from_p0 > trim_source) & (d_from_p1 > trim_target)
-            if keep.sum() < 4:  # too short to be useful
-                continue
-            curve = curve[keep]
-            # Map p_ij in [EDGE_PROB_THRESHOLD, 0.20] -> [LW_MIN, LW_MAX].
-            t = np.clip((p_ij - EDGE_PROB_THRESHOLD) / 0.18, 0, 1)
-            lw = LW_MIN + t * (LW_MAX - LW_MIN)
-            ax_pca.plot(curve[:, 0], curve[:, 1], color="black", lw=lw,
-                        alpha=0.9, zorder=60, solid_capstyle="round")
-            # Filled arrowhead near the end of the curve. The head is sized
-            # generously so the direction is unambiguous at the printed size;
-            # taking a longer base (curve[-8]) gives it enough length to
-            # render as a clear triangle rather than a sliver.
-            head_anchor = max(8, int(0.12 * len(curve)))
-            ax_pca.annotate(
-                "", xy=tuple(curve[-1]), xytext=tuple(curve[-head_anchor]),
-                arrowprops=dict(
-                    arrowstyle="-|>,head_length=0.55,head_width=0.32",
-                    color="black", fc="black", lw=0,
-                    mutation_scale=22 + 18 * t,
-                ),
-                zorder=61,
-            )
-            # Place label closer to the source (t=0.30 along the curve) and
-            # pushed off the curve perpendicularly. Anchoring near the source
-            # rather than the midpoint separates labels belonging to edges
-            # that share a destination — critical near C3 where 1->3, 2->3,
-            # and 5->3 would otherwise stack.
-            anchor_t = 0.30
-            anchor_idx = int(anchor_t * (len(curve) - 1))
-            anchor = curve[anchor_idx]
-            label_pos = anchor + 0.45 * perp
-            ax_pca.text(
-                label_pos[0], label_pos[1], f"{p_ij:.2f}",
-                fontsize=10, color="black", ha="center", va="center",
-                fontweight="bold",
-                bbox=dict(boxstyle="round,pad=0.10", fc="white",
-                          ec="0.6", lw=0.6, alpha=0.92),
-                zorder=62,
-            )
 
     for s in range(NUM_STATES):
         ax_pca.scatter(*bary[s], s=bubble_size[s], color=STATE_COLORS[s],
@@ -831,7 +750,7 @@ def generate_fig9bis_markovianity_coldpools():
         title="solid: empirical   dashed: Markov",
         title_fontsize=8,
     )
-    axL.set_title("(a) per-state indicator autocorrelation")
+    wfp.panel_label(axL, "a.")
 
     # -- Right: target state zoom with CP conditioning -------------------------
     axR.plot(
@@ -854,9 +773,7 @@ def generate_fig9bis_markovianity_coldpools():
     axR.set_ylim(-0.05, 1.1)
     axR.grid(True, alpha=0.3)
     axR.legend(fontsize=8, frameon=False)
-    axR.set_title(
-        f"(b) state {wfp.state_label(target)}  --  conditioning on CP at $t$"
-    )
+    wfp.panel_label(axR, "b.")
 
     plt.tight_layout()
 

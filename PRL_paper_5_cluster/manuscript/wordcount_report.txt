@@ -1,0 +1,13 @@
+Text word count -- July 23 draft vs July 28 update
+
+NOTE (relabelled 2026-10-23): the column originally labelled "submitted" is the
+JULY 23 DRAFT (DRAFT_2026-07-23_NOT_SUBMITTED_main_letter_no_endmatter.tex),
+which was NOT submitted. The version actually submitted to PRL on 2026-07-28 is
+PRL_SUBMITTED_2026-07-28_main_letter_with_endmatter.tex. The "updated" column
+was computed on July 28 (most likely main_letteronly.tex, the Letter body
+without End Matter).
+
+  method                              draft-07-23   updated   difference
+  texcount 3.1.1 (text + captions)       3080      2541        539
+  Downes wordcount v1.7                  3596      3022        574
+  simple proxy                           3159      2637        522
