@@ -23,8 +23,8 @@ The other files are **not** the submitted version:
 | `supplementary_endmatter.tex` | Working file for the End Matter split |
 | `*_natcomp_backup.tex` | Earlier Nature Comp. Sci. article-class versions |
 
-Note: `.gitignore` excludes `*_twocolumn.tex` and `*_twocolumn.pdf`, so the working file `main_twocolumn.tex` is not in git.
-The frozen `PRL_SUBMITTED_*` copies are the record.
+`main_twocolumn.tex` / `.pdf` is the **working file** the submission was built from. It may change after 2026-07-28.
+The frozen `PRL_SUBMITTED_*` copies (and the git tag) are the record of what was submitted.
 
 Building the frozen Letter needs `supplementary.aux` for cross-references, so build the Supplemental Material first.
 
